@@ -1,0 +1,12 @@
+{
+  "role": "triage",
+  "name": "Drew",
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.2,
+  "autoStart": false,
+  "permissions": {
+    "canCreateFiles": false,
+    "canModifyCode": false,
+    "canRunCommands": []
+  }
+}

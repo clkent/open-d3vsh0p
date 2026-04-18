@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# Pre-commit hook: run orchestrator tests when orchestrator files are staged.
+# Also verifies that new source files have corresponding test files.
+# Skips quickly when no orchestrator files are in the changeset.
+
+# Check if any staged files are under platform/orchestrator/
+ORCH_FILES=$(git diff --cached --name-only -- platform/orchestrator/)
+
+if [ -z "$ORCH_FILES" ]; then
+  exit 0
+fi
+
+# Check for new source files without corresponding test files
+NEW_SRC_FILES=$(git diff --cached --name-only --diff-filter=A -- 'platform/orchestrator/src/*.js' 'platform/orchestrator/src/**/*.js' | grep -v '\.test\.js$')
+
+MISSING_TESTS=""
+for src_file in $NEW_SRC_FILES; do
+  test_file=$(echo "$src_file" | sed 's/\.js$/.test.js/')
+  # Check if test file exists in staging area or on disk
+  if ! git diff --cached --name-only | grep -q "^${test_file}$" && [ ! -f "$test_file" ]; then
+    basename=$(basename "$src_file" .js)
+    MISSING_TESTS="$MISSING_TESTS\n    Missing test file for ${basename}.js — create ${basename}.test.js"
+  fi
+done
+
+if [ -n "$MISSING_TESTS" ]; then
+  echo ""
+  echo "  BLOCKED: New source files are missing test files:"
+  printf "$MISSING_TESTS\n"
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "  Running orchestrator tests..."
+echo ""
+
+cd platform/orchestrator && npm test
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "  BLOCKED: Orchestrator tests failed. Fix before committing."
+  echo ""
+  exit 1
+fi
+
+exit 0

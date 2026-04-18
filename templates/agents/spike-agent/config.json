@@ -1,0 +1,13 @@
+{
+  "role": "spike",
+  "name": "Morgan",
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.7,
+  "autoStart": false,
+  "permissions": {
+    "canCreateFiles": true,
+    "canModifyCode": false,
+    "canInstallPackages": false,
+    "canRunCommands": ["npm", "node", "git"]
+  }
+}

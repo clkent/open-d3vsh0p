@@ -1,0 +1,13 @@
+{
+  "role": "implementation",
+  "name": "Developer",
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.7,
+  "autoStart": false,
+  "permissions": {
+    "canCreateFiles": true,
+    "canModifyCode": true,
+    "canInstallPackages": true,
+    "canRunCommands": ["npm", "node", "git", "openspec"]
+  }
+}

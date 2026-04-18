@@ -1,0 +1,23 @@
+# Runtime session artifacts
+active-agents/*/orchestrator/logs/*.jsonl
+active-agents/*/orchestrator/logs/*-summary.json
+active-agents/*/orchestrator/state.json
+active-agents/*/orchestrator/pm-session.json
+active-agents/*/orchestrator/pair-session.json
+active-agents/*/orchestrator/agent-session.json
+active-agents/*/orchestrator/reported-issues.json
+active-agents/*/orchestrator/run.lock
+active-agents/_kickoff/logs/*.jsonl
+
+# Dependencies
+node_modules/
+
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json

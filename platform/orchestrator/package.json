@@ -1,0 +1,17 @@
+{
+  "name": "@devshop/orchestrator",
+  "version": "0.1.0",
+  "description": "d3vsh0p agent orchestrator - runs microcycles of spec-driven development",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.87",
+    "ws": "^8.19.0"
+  }
+}

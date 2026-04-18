@@ -1,0 +1,12 @@
+{
+  "role": "security",
+  "name": "Casey",
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.3,
+  "autoStart": false,
+  "permissions": {
+    "canCreateFiles": false,
+    "canModifyCode": false,
+    "canRunCommands": ["npm audit", "git"]
+  }
+}

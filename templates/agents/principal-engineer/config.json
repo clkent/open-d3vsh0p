@@ -1,0 +1,12 @@
+{
+  "role": "principal",
+  "name": "Morgan",
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.5,
+  "autoStart": false,
+  "permissions": {
+    "canCreateFiles": false,
+    "canModifyCode": false,
+    "canRunCommands": ["git"]
+  }
+}

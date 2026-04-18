@@ -1,0 +1,12 @@
+{
+  "role": "pm",
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.7,
+  "maxTokens": 4096,
+  "autoStart": true,
+  "permissions": {
+    "canCreateFiles": true,
+    "canModifySpecs": true,
+    "canRunCommands": ["openspec", "git"]
+  }
+}

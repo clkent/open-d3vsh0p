@@ -1,0 +1,81 @@
+{
+  "budgetLimitUsd": 30.00,
+  "warningThresholdPct": 80,
+  "timeLimitMs": 25200000,
+  "maxAgentInvocations": 50,
+  "retryLimits": {
+    "implementation": 3,
+    "implementationMaxAttempts": 7,
+    "testFix": 3,
+    "reviewFix": 2
+  },
+  "agents": {
+    "implementation": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 5.00,
+      "timeoutMs": 600000,
+      "allowedTools": ["Bash", "Edit", "Read", "Write", "Glob", "Grep"]
+    },
+    "principal-engineer": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 2.00,
+      "timeoutMs": 120000,
+      "allowedTools": ["Read", "Glob", "Grep", "Bash"]
+    },
+    "security": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 1.00,
+      "timeoutMs": 120000,
+      "allowedTools": ["Read", "Glob", "Grep"]
+    },
+    "pair": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 5.00,
+      "timeoutMs": 600000,
+      "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep", "Edit"]
+    },
+    "pm": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 2.00,
+      "timeoutMs": 300000,
+      "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep", "Edit"]
+    },
+    "spike": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 3.00,
+      "timeoutMs": 300000,
+      "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep"]
+    },
+    "diagnostic": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 3.00,
+      "timeoutMs": 300000,
+      "allowedTools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
+    },
+    "triage": {
+      "model": "claude-sonnet-4-20250514",
+      "maxBudgetUsd": 0.25,
+      "timeoutMs": 30000,
+      "allowedTools": []
+    }
+  },
+  "personas": [
+    { "name": "Jordan", "agentType": "implementation-agent" },
+    { "name": "Alex",   "agentType": "implementation-agent" },
+    { "name": "Sam",    "agentType": "implementation-agent" },
+    { "name": "Taylor", "agentType": "implementation-agent" }
+  ],
+  "parallelism": {
+    "maxConcurrentGroups": 4,
+    "worktreeDir": ".worktrees"
+  },
+  "git": {
+    "sessionBranchPrefix": "devshop/session",
+    "commitPrefix": "feat"
+  },
+  "healthCheck": {
+    "commands": [],
+    "timeoutMs": 120000,
+    "nativeBuildTimeoutMs": 300000
+  }
+}

@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# Pre-push hook: prevent direct pushes to main.
+# All changes must go through feature branches and pull requests.
+
+remote="$1"
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if echo "$remote_ref" | grep -q "refs/heads/main$"; then
+    echo ""
+    echo "  BLOCKED: Direct pushes to main are not allowed."
+    echo ""
+    echo "  Use a feature branch and create a pull request instead:"
+    echo "    git checkout -b feat/my-feature"
+    echo "    git push -u origin feat/my-feature"
+    echo "    gh pr create"
+    echo ""
+    exit 1
+  fi
+done
+
+exit 0
