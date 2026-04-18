@@ -2,6 +2,8 @@
 
 An agent orchestration platform that uses the Claude Agent SDK to run AI agents that build software projects autonomously. Projects are spec-driven using OpenSpec, live in isolated repositories outside of d3vsh0p, and are managed through structured development cycles.
 
+**Website:** [d3vsh0p.com](https://d3vsh0p.com)
+
 **Important:** Orchestrator agents run with `bypassPermissions` enabled — they have full tool access within project directories. All agent work is reviewed by the principal engineer agent (Morgan) before merge. See [SECURITY.md](SECURITY.md) for the full trust model.
 
 ## Architecture
