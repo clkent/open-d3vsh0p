@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs/promises');
 const os = require('os');
-const { findNearMisses, findHeadingLevelIssues, validateRoadmapFormat, buildRoadmapFixPrompt } = require('./roadmap-format-checker');
+const { findNearMisses, findHeadingLevelIssues, findMissingGroups, validateRoadmapFormat, buildRoadmapFixPrompt } = require('./roadmap-format-checker');
 const { RoadmapReader } = require('./roadmap-reader');
 
 describe('findNearMisses', () => {
@@ -253,6 +253,21 @@ describe('validateRoadmapFormat', () => {
     assert.ok(!result.warnings.some(w => w.includes('bundled')));
   });
 
+  it('fails with missingGroups when items lack group headings', async (t) => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fmt-test-'));
+    t.after(async () => { await fs.rm(tmpDir, { recursive: true, force: true }); });
+
+    await writeRoadmap(`# Roadmap: No Groups
+## Phase I: Foundation
+- [ ] \`setup-db\` — Initialize database
+- [ ] \`setup-auth\` — Add auth
+`);
+    const result = await validateRoadmapFormat(tmpDir);
+    assert.equal(result.valid, false);
+    assert.ok(result.missingGroups.length > 0);
+    assert.ok(result.missingGroups[0].includes('Foundation'));
+  });
+
   it('handles missing specs dir gracefully', async (t) => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fmt-test-'));
     t.after(async () => { await fs.rm(tmpDir, { recursive: true, force: true }); });
@@ -329,6 +344,21 @@ describe('buildRoadmapFixPrompt', () => {
     assert.ok(prompt.includes('/home/user/my-project/openspec/roadmap.md'));
   });
 
+  it('includes missing-groups section when present', () => {
+    const result = {
+      valid: false,
+      errors: [],
+      warnings: [],
+      nearMisses: [],
+      missingGroups: ['Line 3: Phase "Foundation" has 2 checkbox item(s) but no ### Group headings — add at least one group, e.g. ### Group A: Foundation']
+    };
+    const prompt = buildRoadmapFixPrompt(result, '/tmp/project');
+    assert.ok(prompt.includes('Missing group headings'));
+    assert.ok(prompt.includes('Foundation'));
+    assert.ok(prompt.includes('Every phase MUST have at least one group heading'));
+    assert.ok(prompt.includes('### Group A:'));
+  });
+
   it('includes heading-level diagnostics when present', () => {
     const result = {
       valid: false,
@@ -342,6 +372,70 @@ describe('buildRoadmapFixPrompt', () => {
     assert.ok(prompt.includes('### Phase I: Setup'));
     assert.ok(prompt.includes('Phases: `## Phase I: Label` (two #)'));
     assert.ok(prompt.includes('Groups: `### Group A: Label` (three #)'));
+  });
+});
+
+describe('findMissingGroups', () => {
+  it('detects phase with items but no group headings', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+- [ ] \`setup-db\` — Initialize database
+- [ ] \`setup-auth\` — Add auth
+`;
+    const diags = findMissingGroups(content);
+    assert.equal(diags.length, 1);
+    assert.ok(diags[0].includes('Phase "Foundation"'));
+    assert.ok(diags[0].includes('2 checkbox item(s)'));
+    assert.ok(diags[0].includes('no ### Group headings'));
+  });
+
+  it('passes when all phases have group headings', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database
+- [x] \`setup-auth\` — Add auth
+`;
+    assert.deepEqual(findMissingGroups(content), []);
+  });
+
+  it('handles mixed phases — some with groups, some without', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database
+
+## Phase II: Features
+- [ ] \`user-profile\` — User profile page
+- [ ] \`user-settings\` — User settings
+`;
+    const diags = findMissingGroups(content);
+    assert.equal(diags.length, 1);
+    assert.ok(diags[0].includes('Phase "Features"'));
+    assert.ok(diags[0].includes('2 checkbox item(s)'));
+  });
+
+  it('returns empty when phase has no items and no groups', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+Some descriptive text but no items.
+
+## Phase II: Features
+### Group A: UI
+- [ ] \`user-profile\` — Profile page
+`;
+    assert.deepEqual(findMissingGroups(content), []);
+  });
+
+  it('reports correct line numbers', () => {
+    const content = `# Roadmap: Test
+
+## Phase I: Foundation
+- [ ] \`setup-db\` — Work
+`;
+    const diags = findMissingGroups(content);
+    assert.equal(diags.length, 1);
+    assert.ok(diags[0].includes('Line 3'));
   });
 });
 
