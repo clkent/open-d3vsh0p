@@ -1,0 +1,72 @@
+{
+  "projects": [
+    {
+      "id": "proj-000-my-app",
+      "name": "my-app",
+      "projectDir": "/Users/you/projects/my-app",
+      "githubRepo": "https://github.com/you/my-app",
+      "registeredAt": "2026-01-01T00:00:00.000Z",
+      "status": "active",
+      "lastSessionId": "2026-01-15-03-22",
+      "schedule": {
+        "enabled": true,
+        "windows": {
+          "night": {
+            "enabled": true,
+            "startHour": 1,
+            "endHour": 8,
+            "budgetUsd": 15,
+            "timeLimitHours": 6
+          },
+          "morning": {
+            "enabled": true,
+            "startHour": 8,
+            "endHour": 9,
+            "action": "digest"
+          },
+          "day": {
+            "enabled": true,
+            "startHour": 9,
+            "endHour": 17,
+            "budgetUsd": 20,
+            "timeLimitHours": 7
+          },
+          "techdebt": {
+            "enabled": true,
+            "startHour": 18,
+            "endHour": 22,
+            "budgetUsd": 10,
+            "timeLimitHours": 3
+          }
+        },
+        "cadence": {
+          "weekly": {
+            "enabled": true,
+            "dayOfWeek": 0,
+            "hour": 2,
+            "tasks": [
+              "stale-branch-cleanup",
+              "dead-worktree-removal"
+            ]
+          },
+          "monthly": {
+            "enabled": true,
+            "dayOfMonth": 1,
+            "hour": 3,
+            "tasks": [
+              "archive-parked",
+              "cost-review"
+            ]
+          }
+        },
+        "notifications": {
+          "githubIssues": true
+        }
+      },
+      "preview": {
+        "command": "npm run dev",
+        "port": 3000
+      }
+    }
+  ]
+}
