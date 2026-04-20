@@ -155,6 +155,32 @@ function findMissingGroups(content) {
   return diagnostics;
 }
 
+// Matches timeline/duration language that doesn't belong in roadmaps
+const TIMELINE_REGEX = /(?:~?\d+(?:\s*[–-]\s*\d+)?\s*(?:months?|weeks?|days?|hours?|wks?|mos?|hrs?|mo|wk|hr|[dwh])\b)|(?:\bestimated\s+time\b|\btimeline\s*:|\bETA\b|\btime\s+estimate\b|\bduration\s*:)/i;
+
+/**
+ * Scan raw roadmap markdown for timeline estimates (durations, ETAs, etc.).
+ * Roadmaps describe *what* gets built, not *when*. Time estimates go stale
+ * immediately and create false expectations.
+ *
+ * @param {string} content - Raw markdown content
+ * @returns {{ line: number, match: string }[]} Array of diagnostics
+ */
+function findTimelineEstimates(content) {
+  const lines = content.split('\n');
+  const results = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(TIMELINE_REGEX);
+    if (m) {
+      results.push({ line: i + 1, match: m[0] });
+    }
+  }
+
+  return results;
+}
+
 /**
  * Validate the roadmap format for a project directory.
  * Reads the roadmap file, checks for near-misses in raw content,
@@ -177,7 +203,8 @@ async function validateRoadmapFormat(projectDir) {
       warnings: [],
       nearMisses: [],
       headingIssues: [],
-      missingGroups: []
+      missingGroups: [],
+      timelineEstimates: []
     };
   }
 
@@ -186,6 +213,9 @@ async function validateRoadmapFormat(projectDir) {
 
   // Check for phases with items but no group headings
   const missingGroups = findMissingGroups(content);
+
+  // Check for timeline estimates
+  const timelineEstimates = findTimelineEstimates(content);
 
   // Parse and validate structure
   const reader = new RoadmapReader(projectDir);
@@ -213,9 +243,10 @@ async function validateRoadmapFormat(projectDir) {
     // specs dir may not exist yet during early kickoff — that's fine
   }
 
-  // Near-misses, heading issues, and missing groups cause invalid result
+  // Near-misses, heading issues, missing groups, and timeline estimates cause invalid result
   const valid = validation.valid && nearMisses.length === 0
-    && headingIssues.length === 0 && missingGroups.length === 0;
+    && headingIssues.length === 0 && missingGroups.length === 0
+    && timelineEstimates.length === 0;
 
   return {
     valid,
@@ -223,7 +254,8 @@ async function validateRoadmapFormat(projectDir) {
     warnings,
     nearMisses,
     headingIssues,
-    missingGroups
+    missingGroups,
+    timelineEstimates
   };
 }
 
@@ -268,6 +300,17 @@ function buildRoadmapFixPrompt(result, projectDir) {
     parts.push('');
   }
 
+  if (result.timelineEstimates && result.timelineEstimates.length > 0) {
+    parts.push('**Timeline estimates** (roadmaps must not include time estimates):');
+    for (const est of result.timelineEstimates) {
+      parts.push(`  - Line ${est.line}: found "${est.match}" — remove this estimate`);
+    }
+    parts.push('');
+    parts.push('**Remove ALL time estimates.** Roadmaps describe what gets built, not when.');
+    parts.push('Do not include durations, ETAs, or timeline language anywhere in the roadmap.');
+    parts.push('');
+  }
+
   if (result.nearMisses.length > 0) {
     parts.push('**Near-miss items** (checkbox lines that the parser will skip):');
     for (const miss of result.nearMisses) {
@@ -307,4 +350,4 @@ function buildRoadmapFixPrompt(result, projectDir) {
   return parts.join('\n');
 }
 
-module.exports = { findNearMisses, findHeadingLevelIssues, findMissingGroups, validateRoadmapFormat, buildRoadmapFixPrompt };
+module.exports = { findNearMisses, findHeadingLevelIssues, findMissingGroups, findTimelineEstimates, validateRoadmapFormat, buildRoadmapFixPrompt };

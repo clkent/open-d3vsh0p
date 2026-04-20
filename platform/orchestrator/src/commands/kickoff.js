@@ -320,7 +320,8 @@ Be thorough — the implementation agents will work directly from these specs an
     }
 
     if (attempt === maxFormatRetries - 1) {
-      const issues = [...fmtResult.nearMisses, ...fmtResult.errors, ...(fmtResult.missingGroups || [])];
+      const issues = [...fmtResult.nearMisses, ...fmtResult.errors, ...(fmtResult.missingGroups || []),
+        ...(fmtResult.timelineEstimates || []).map(e => `Line ${e.line}: "${e.match}"`)];
       console.error(`  Warning: Roadmap format still invalid after ${maxFormatRetries} attempts.`);
       console.error(`  Issues: ${issues.join('; ')}`);
       console.error(`  Run \`./devshop plan ${projectId}\` to fix manually.`);
@@ -328,7 +329,8 @@ Be thorough — the implementation agents will work directly from these specs an
     }
 
     const issueCount = fmtResult.nearMisses.length + fmtResult.errors.length
-      + (fmtResult.missingGroups?.length || 0);
+      + (fmtResult.missingGroups?.length || 0)
+      + (fmtResult.timelineEstimates?.length || 0);
     console.log(`  Roadmap has ${issueCount} format issue(s). Asking Riley to fix...`);
 
     const fixPrompt = buildRoadmapFixPrompt(fmtResult, projectDir);
