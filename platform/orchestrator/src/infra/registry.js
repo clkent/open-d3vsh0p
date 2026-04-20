@@ -39,8 +39,12 @@ function resolveProject(registry, input) {
 }
 
 async function loadRegistry() {
-  const raw = await fs.readFile(REGISTRY_PATH, 'utf-8');
-  return JSON.parse(raw);
+  try {
+    const raw = await fs.readFile(REGISTRY_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return { projects: [] };
+  }
 }
 
 async function saveRegistry(registry) {
