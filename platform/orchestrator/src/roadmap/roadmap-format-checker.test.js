@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs/promises');
 const os = require('os');
-const { findNearMisses, findHeadingLevelIssues, findMissingGroups, validateRoadmapFormat, buildRoadmapFixPrompt } = require('./roadmap-format-checker');
+const { findNearMisses, findHeadingLevelIssues, findMissingGroups, findTimelineEstimates, validateRoadmapFormat, buildRoadmapFixPrompt } = require('./roadmap-format-checker');
 const { RoadmapReader } = require('./roadmap-reader');
 
 describe('findNearMisses', () => {
@@ -268,6 +268,22 @@ describe('validateRoadmapFormat', () => {
     assert.ok(result.missingGroups[0].includes('Foundation'));
   });
 
+  it('fails with timelineEstimates when roadmap has duration language', async (t) => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fmt-test-'));
+    t.after(async () => { await fs.rm(tmpDir, { recursive: true, force: true }); });
+
+    await writeRoadmap(`# Roadmap: Timeline Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database (~2 weeks)
+- [ ] \`setup-auth\` — Add auth (3 days)
+`);
+    const result = await validateRoadmapFormat(tmpDir);
+    assert.equal(result.valid, false);
+    assert.equal(result.timelineEstimates.length, 2);
+    assert.equal(result.timelineEstimates[0].match, '~2 weeks');
+  });
+
   it('handles missing specs dir gracefully', async (t) => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fmt-test-'));
     t.after(async () => { await fs.rm(tmpDir, { recursive: true, force: true }); });
@@ -359,6 +375,21 @@ describe('buildRoadmapFixPrompt', () => {
     assert.ok(prompt.includes('### Group A:'));
   });
 
+  it('includes timeline-estimates section when present', () => {
+    const result = {
+      valid: false,
+      errors: [],
+      warnings: [],
+      nearMisses: [],
+      timelineEstimates: [{ line: 5, match: '~2 weeks' }]
+    };
+    const prompt = buildRoadmapFixPrompt(result, '/tmp/project');
+    assert.ok(prompt.includes('Timeline estimates'));
+    assert.ok(prompt.includes('Line 5'));
+    assert.ok(prompt.includes('~2 weeks'));
+    assert.ok(prompt.includes('Remove ALL time estimates'));
+  });
+
   it('includes heading-level diagnostics when present', () => {
     const result = {
       valid: false,
@@ -436,6 +467,107 @@ Some descriptive text but no items.
     const diags = findMissingGroups(content);
     assert.equal(diags.length, 1);
     assert.ok(diags[0].includes('Line 3'));
+  });
+});
+
+describe('findTimelineEstimates', () => {
+  it('detects duration with units like "2 weeks" and "~3 days"', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database (~2 weeks)
+- [ ] \`setup-auth\` — Add auth (3 days)
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 2);
+    assert.equal(results[0].match, '~2 weeks');
+    assert.equal(results[1].match, '3 days');
+  });
+
+  it('detects range durations like "1-2 months"', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`big-feature\` — Rewrite everything (1-2 months)
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].match, '1-2 months');
+  });
+
+  it('detects shorthand units like "2w", "3d", "1mo"', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database 2w
+- [ ] \`setup-auth\` — Add auth 3d
+- [ ] \`big-feature\` — Major work 1mo
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 3);
+  });
+
+  it('detects standalone timeline phrases', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+Timeline: 2 weeks
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database
+ETA end of sprint
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 2);
+    assert.ok(results[0].match.includes('Timeline'));
+    assert.equal(results[1].match, 'ETA');
+  });
+
+  it('detects "estimated time", "time estimate", and "duration:"', () => {
+    const content = `Estimated time for Phase I
+time estimate: a lot
+duration: TBD
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 3);
+  });
+
+  it('returns empty for clean roadmaps (no false positives)', () => {
+    const content = `# Roadmap: Test
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database
+- [x] \`setup-auth\` — Add auth module
+- [ ] \`update-deps\` — Update dependencies
+`;
+    assert.deepEqual(findTimelineEstimates(content), []);
+  });
+
+  it('is case-insensitive', () => {
+    const content = `# Roadmap
+- [ ] \`feat\` — Do work (2 WEEKS)
+ETA: next Tuesday
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 2);
+  });
+
+  it('reports correct line numbers', () => {
+    const content = `# Roadmap: Test
+
+## Phase I: Foundation
+### Group A: Core
+- [ ] \`setup-db\` — Initialize database (~2 weeks)
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].line, 5);
+  });
+
+  it('detects hours and hrs', () => {
+    const content = `- [ ] \`quick-fix\` — Small tweak (4 hours)
+- [ ] \`another\` — Another tweak (2 hrs)
+`;
+    const results = findTimelineEstimates(content);
+    assert.equal(results.length, 2);
   });
 });
 
