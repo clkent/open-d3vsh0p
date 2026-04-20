@@ -1,3 +1,6 @@
+# Project registry (local-only — contains personal project info)
+project-registry.json
+
 # Runtime project state — ignore everything, keep only .gitkeep scaffolding
 active-agents/**/
 !active-agents/*/orchestrator/
