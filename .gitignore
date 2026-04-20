@@ -1,13 +1,8 @@
-# Runtime session artifacts
-active-agents/*/orchestrator/logs/*.jsonl
-active-agents/*/orchestrator/logs/*-summary.json
-active-agents/*/orchestrator/state.json
-active-agents/*/orchestrator/pm-session.json
-active-agents/*/orchestrator/pair-session.json
-active-agents/*/orchestrator/agent-session.json
-active-agents/*/orchestrator/reported-issues.json
-active-agents/*/orchestrator/run.lock
-active-agents/_kickoff/logs/*.jsonl
+# Runtime project state — ignore everything, keep only .gitkeep scaffolding
+active-agents/**/
+!active-agents/*/orchestrator/
+!active-agents/*/orchestrator/logs/
+!active-agents/*/orchestrator/logs/.gitkeep
 
 # Dependencies
 node_modules/

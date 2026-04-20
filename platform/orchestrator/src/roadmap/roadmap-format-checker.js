@@ -102,12 +102,66 @@ function findHeadingLevelIssues(content, roadmap) {
 }
 
 /**
+ * Scan raw roadmap markdown for phases that have checkbox items but no
+ * ### Group headings. The parser silently drops items when currentGroup
+ * is null, so this catches the case where Riley writes items directly
+ * under a ## Phase heading without any group subheading.
+ *
+ * @param {string} content - Raw markdown content
+ * @returns {string[]} Array of diagnostic messages with line numbers
+ */
+function findMissingGroups(content) {
+  const lines = content.split('\n');
+  const diagnostics = [];
+
+  let currentPhaseLabel = null;
+  let currentPhaseLineNum = null;
+  let hasGroupInPhase = false;
+  let checkboxCount = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // New phase starts — check previous phase
+    if (/^## Phase\s+/.test(line)) {
+      if (currentPhaseLabel && !hasGroupInPhase && checkboxCount > 0) {
+        diagnostics.push(
+          `Line ${currentPhaseLineNum}: Phase "${currentPhaseLabel}" has ${checkboxCount} checkbox item(s) but no ### Group headings — add at least one group, e.g. ### Group A: ${currentPhaseLabel}`
+        );
+      }
+      currentPhaseLabel = line.replace(/^## Phase\s+[IVXLC0-9]+:\s*/, '').trim();
+      currentPhaseLineNum = i + 1;
+      hasGroupInPhase = false;
+      checkboxCount = 0;
+      continue;
+    }
+
+    if (/^### Group\s+[A-Z]:/.test(line)) {
+      hasGroupInPhase = true;
+    }
+
+    if (CHECKBOX_REGEX.test(line)) {
+      checkboxCount++;
+    }
+  }
+
+  // Check last phase
+  if (currentPhaseLabel && !hasGroupInPhase && checkboxCount > 0) {
+    diagnostics.push(
+      `Line ${currentPhaseLineNum}: Phase "${currentPhaseLabel}" has ${checkboxCount} checkbox item(s) but no ### Group headings — add at least one group, e.g. ### Group A: ${currentPhaseLabel}`
+    );
+  }
+
+  return diagnostics;
+}
+
+/**
  * Validate the roadmap format for a project directory.
  * Reads the roadmap file, checks for near-misses in raw content,
  * then parses and validates structure.
  *
  * @param {string} projectDir - Path to the project directory
- * @returns {Promise<{ valid: boolean, errors: string[], warnings: string[], nearMisses: string[], headingIssues: string[] }>}
+ * @returns {Promise<{ valid: boolean, errors: string[], warnings: string[], nearMisses: string[], headingIssues: string[], missingGroups: string[] }>}
  */
 async function validateRoadmapFormat(projectDir) {
   const roadmapPath = path.join(projectDir, 'openspec', 'roadmap.md');
@@ -122,12 +176,16 @@ async function validateRoadmapFormat(projectDir) {
       errors: ['roadmap.md not found'],
       warnings: [],
       nearMisses: [],
-      headingIssues: []
+      headingIssues: [],
+      missingGroups: []
     };
   }
 
   // Check for near-misses in raw content
   const nearMisses = findNearMisses(content);
+
+  // Check for phases with items but no group headings
+  const missingGroups = findMissingGroups(content);
 
   // Parse and validate structure
   const reader = new RoadmapReader(projectDir);
@@ -155,15 +213,17 @@ async function validateRoadmapFormat(projectDir) {
     // specs dir may not exist yet during early kickoff — that's fine
   }
 
-  // Near-misses and heading issues cause invalid result
-  const valid = validation.valid && nearMisses.length === 0 && headingIssues.length === 0;
+  // Near-misses, heading issues, and missing groups cause invalid result
+  const valid = validation.valid && nearMisses.length === 0
+    && headingIssues.length === 0 && missingGroups.length === 0;
 
   return {
     valid,
     errors: validation.errors,
     warnings,
     nearMisses,
-    headingIssues
+    headingIssues,
+    missingGroups
   };
 }
 
@@ -188,6 +248,23 @@ function buildRoadmapFixPrompt(result, projectDir) {
     parts.push('**Required heading levels:**');
     parts.push('- Phases: `## Phase I: Label` (two #)');
     parts.push('- Groups: `### Group A: Label` (three #)');
+    parts.push('');
+  }
+
+  if (result.missingGroups && result.missingGroups.length > 0) {
+    parts.push('**Missing group headings** (items found under phases with no ### Group heading):');
+    for (const issue of result.missingGroups) {
+      parts.push(`  - ${issue}`);
+    }
+    parts.push('');
+    parts.push('**Every phase MUST have at least one group heading.** Example:');
+    parts.push('```');
+    parts.push('## Phase I: Foundation');
+    parts.push('');
+    parts.push('### Group A: Foundation');
+    parts.push('- [ ] `setup-db` — Initialize the database');
+    parts.push('- [ ] `setup-auth` — Add authentication');
+    parts.push('```');
     parts.push('');
   }
 
@@ -230,4 +307,4 @@ function buildRoadmapFixPrompt(result, projectDir) {
   return parts.join('\n');
 }
 
-module.exports = { findNearMisses, findHeadingLevelIssues, validateRoadmapFormat, buildRoadmapFixPrompt };
+module.exports = { findNearMisses, findHeadingLevelIssues, findMissingGroups, validateRoadmapFormat, buildRoadmapFixPrompt };

@@ -320,14 +320,15 @@ Be thorough — the implementation agents will work directly from these specs an
     }
 
     if (attempt === maxFormatRetries - 1) {
-      const issues = [...fmtResult.nearMisses, ...fmtResult.errors];
+      const issues = [...fmtResult.nearMisses, ...fmtResult.errors, ...(fmtResult.missingGroups || [])];
       console.error(`  Warning: Roadmap format still invalid after ${maxFormatRetries} attempts.`);
       console.error(`  Issues: ${issues.join('; ')}`);
       console.error(`  Run \`./devshop plan ${projectId}\` to fix manually.`);
       break;
     }
 
-    const issueCount = fmtResult.nearMisses.length + fmtResult.errors.length;
+    const issueCount = fmtResult.nearMisses.length + fmtResult.errors.length
+      + (fmtResult.missingGroups?.length || 0);
     console.log(`  Roadmap has ${issueCount} format issue(s). Asking Riley to fix...`);
 
     const fixPrompt = buildRoadmapFixPrompt(fmtResult, projectDir);
