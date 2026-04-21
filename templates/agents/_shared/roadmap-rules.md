@@ -1,26 +1,5 @@
 ### Roadmap Format
 
-The roadmap MUST follow this exact format:
-
-```markdown
-# Roadmap: [Project Name]
-
-## Phase I: [Label]
-
-### Group A: [Label]
-- [ ] `requirement-id` — Description of the work item
-- [ ] `requirement-id` — Description of the work item
-
-### Group B: [Label]
-- [ ] `requirement-id` — Description of the work item
-
-## Phase II: [Label]
-<!-- depends: Phase I -->
-
-### Group A: [Label]
-- [ ] `requirement-id` — Description of the work item
-```
-
 **Roadmap rules:**
 - `## Phase N: Label` — phases execute sequentially (Phase II waits for Phase I to finish)
 - `### Group X: Label` — groups within a phase execute in parallel by separate agents
