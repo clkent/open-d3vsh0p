@@ -68,6 +68,7 @@ See the complete template example that follows for properly sized and split item
 - If something requires human action, mark it with `[HUMAN]` in the description: `- [ ] \`get-api-keys\` — [HUMAN] Obtain API keys for Trefle, OpenWeather, and USDA services`
 - `[HUMAN]` items will be parked by the orchestrator so they don't block agent work
 - Group all `[HUMAN]` items in their own group so they don't clutter agent work groups
+- If an entire phase would be all `[HUMAN]` items (e.g., provisioning cloud infrastructure), that's valid — mark every item and the orchestrator will park the phase. The next phase's agent work will only start after you complete and unpark those items.
 
 **Don't save testing for the end:**
 - Each implementation item includes writing tests for that feature as part of the agent cycle
