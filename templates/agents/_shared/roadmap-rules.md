@@ -96,8 +96,6 @@ Checkpoints must be specific: name the pages/endpoints/flows, the inputs to use,
 - Common trap: putting project scaffolding (`project-setup`) in the same phase as feature groups that write code into the scaffolded project. The feature agents start immediately and fail because the project doesn't exist yet
 - When in doubt, put it in the next phase — an extra phase is cheaper than a failed parallel execution
 
-If Group B needs files that Group A creates, Group B belongs in the next phase — an extra phase is cheaper than a failed parallel execution.
-
 **Keep phases lean:**
 - 3-5 phases is ideal for an MVP. More phases = more sequential bottlenecks
 - Maximize parallel groups within phases to speed up overall execution — but never at the cost of correctness (see "Groups in a phase MUST be independent" above)
