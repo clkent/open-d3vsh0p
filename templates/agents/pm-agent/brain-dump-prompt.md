@@ -32,3 +32,5 @@ When confirmed, create:
 2. **roadmap.md** in `{{PROJECT_DIR}}/openspec/roadmap.md`
 
 {{>roadmap-rules}}
+
+{{>roadmap-template}}

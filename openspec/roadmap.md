@@ -129,6 +129,7 @@
 
 ### Group D: PM Prompt Quality
 - [x] `pm-roadmap-granularity` — Spec-roadmap alignment rules and self-audit checklist in PM prompts to prevent over-coarse roadmap items that block parallel execution
+- [ ] `pm-roadmap-template` — Complete roadmap template example in PM prompts replacing verbose scattered examples
 
 ### Group E: Spike Phases
 - [x] `spike-phases` — Technical uncertainty investigation before implementation with auto-pause for human review
