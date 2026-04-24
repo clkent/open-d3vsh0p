@@ -611,7 +611,7 @@ describe('ParallelOrchestrator', () => {
       const parkedItems = [];
       const { po, logEntries } = createOrchestrator({
         triage: {
-          parkItem: async (id, opts) => { parkedItems.push({ id, ...opts }); return { classification: 'non_blocking' }; },
+          parkItem: async (id, opts) => { parkedItems.push({ id, ...opts }); return { classification: opts.triageClassification }; },
           triageParkedItems: async () => {}
         },
         roadmapReader: {
@@ -643,6 +643,190 @@ describe('ParallelOrchestrator', () => {
       assert.equal(parkedItems.length, 1);
       assert.equal(parkedItems[0].id, 'human-1');
       assert.match(parkedItems[0].reason, /\[HUMAN\]/);
+    });
+
+    it('classifies HUMAN items in Group Z as non_blocking', async () => {
+      const parkedItems = [];
+      const { po } = createOrchestrator({
+        triage: {
+          parkItem: async (id, opts) => { parkedItems.push({ id, ...opts }); return { classification: opts.triageClassification }; },
+          triageParkedItems: async () => {}
+        },
+        roadmapReader: {
+          getPendingGroups: () => [],
+          parse: async () => ({ title: 'Test', phases: [] }),
+          isComplete: () => false,
+          getNextPhase: () => null,
+          getAllItems: () => [],
+          getParkedItemsInPhase: () => [],
+          markItemComplete: async () => {},
+          resetParkedItems: async () => false
+        }
+      });
+
+      const phase = {
+        number: 1,
+        label: 'Core',
+        groups: [{
+          letter: 'Z',
+          label: 'User Testing',
+          items: [
+            { id: 'test-phase-1', status: 'pending', isHuman: true, description: '[HUMAN] Verify auth flow' }
+          ]
+        }]
+      };
+
+      await po._executePhase(phase);
+      assert.equal(parkedItems.length, 1);
+      assert.equal(parkedItems[0].triageClassification, 'non_blocking');
+    });
+
+    it('classifies HUMAN items in non-Z groups as blocking', async () => {
+      const parkedItems = [];
+      const { po } = createOrchestrator({
+        triage: {
+          parkItem: async (id, opts) => { parkedItems.push({ id, ...opts }); return { classification: opts.triageClassification }; },
+          triageParkedItems: async () => {}
+        },
+        roadmapReader: {
+          getPendingGroups: () => [],
+          parse: async () => ({ title: 'Test', phases: [] }),
+          isComplete: () => false,
+          getNextPhase: () => null,
+          getAllItems: () => [],
+          getParkedItemsInPhase: () => [],
+          markItemComplete: async () => {},
+          resetParkedItems: async () => false
+        }
+      });
+
+      const phase = {
+        number: 2,
+        label: 'Human Prerequisites',
+        groups: [{
+          letter: 'A',
+          label: 'External Services',
+          items: [
+            { id: 'get-api-keys', status: 'pending', isHuman: true, description: '[HUMAN] Obtain API keys' }
+          ]
+        }]
+      };
+
+      await po._executePhase(phase);
+      assert.equal(parkedItems.length, 1);
+      assert.equal(parkedItems[0].triageClassification, 'blocking');
+    });
+
+    it('pauses orchestrator when phase has only blocking HUMAN items', async () => {
+      let pauseRequest = null;
+      const { po } = createOrchestrator({
+        triage: {
+          parkItem: async (id, opts) => { return { classification: opts.triageClassification }; },
+          triageParkedItems: async () => {}
+        },
+        monitor: {
+          shouldStop: () => ({ stop: false }),
+          requestPause: (req) => { pauseRequest = req; },
+          getSnapshot: () => ({}),
+          recordInvocation: () => {},
+          installSignalHandlers: () => {},
+          removeSignalHandlers: () => {},
+          resetCycleCost: () => {}
+        },
+        roadmapReader: {
+          getPendingGroups: () => [],
+          parse: async () => ({ title: 'Test', phases: [] }),
+          isComplete: () => false,
+          getNextPhase: () => null,
+          getAllItems: () => [],
+          getParkedItemsInPhase: () => [],
+          markItemComplete: async () => {},
+          resetParkedItems: async () => false
+        }
+      });
+
+      const phase = {
+        number: 2,
+        label: 'Human Prerequisites',
+        groups: [
+          {
+            letter: 'A',
+            label: 'External Services',
+            items: [
+              { id: 'get-api-keys', status: 'pending', isHuman: true, description: '[HUMAN] Obtain API keys' },
+              { id: 'get-smtp', status: 'pending', isHuman: true, description: '[HUMAN] Get SMTP credentials' }
+            ]
+          },
+          {
+            letter: 'Z',
+            label: 'User Testing',
+            items: [
+              { id: 'test-phase-2', status: 'pending', isHuman: true, description: '[HUMAN] Verify credentials stored' }
+            ]
+          }
+        ]
+      };
+
+      await po._executePhase(phase);
+      assert.notEqual(pauseRequest, null);
+      assert.equal(pauseRequest.reason, 'blocking_park');
+      assert.equal(pauseRequest.blockingItem.id, 'get-api-keys');
+    });
+
+    it('does not pause when phase has agent-executable work alongside HUMAN items', async () => {
+      let pauseRequest = null;
+      const { po } = createOrchestrator({
+        triage: {
+          parkItem: async (id, opts) => { return { classification: opts.triageClassification }; },
+          triageParkedItems: async () => {}
+        },
+        monitor: {
+          shouldStop: () => ({ stop: false }),
+          requestPause: (req) => { pauseRequest = req; },
+          getSnapshot: () => ({}),
+          recordInvocation: () => {},
+          installSignalHandlers: () => {},
+          removeSignalHandlers: () => {},
+          resetCycleCost: () => {}
+        },
+        roadmapReader: {
+          getPendingGroups: (phase) => phase.groups.filter(g => g.items.some(i => i.status === 'pending')),
+          parse: async () => ({ title: 'Test', phases: [] }),
+          isComplete: () => false,
+          getNextPhase: () => null,
+          getAllItems: () => [],
+          getParkedItemsInPhase: () => [],
+          markItemComplete: async () => {},
+          resetParkedItems: async () => false
+        }
+      });
+
+      // Mock _executeGroup to avoid full group execution
+      po._executeGroup = async () => [];
+
+      const phase = {
+        number: 3,
+        label: 'Foundation',
+        groups: [
+          {
+            letter: 'A',
+            label: 'Data Layer',
+            items: [
+              { id: 'task-schema', status: 'pending', isHuman: false, description: 'Database schema' }
+            ]
+          },
+          {
+            letter: 'B',
+            label: 'Human Setup',
+            items: [
+              { id: 'get-keys', status: 'pending', isHuman: true, description: '[HUMAN] Get API keys' }
+            ]
+          }
+        ]
+      };
+
+      await po._executePhase(phase);
+      assert.equal(pauseRequest, null);
     });
 
     it('assigns personas to groups', async () => {

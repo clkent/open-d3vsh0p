@@ -87,7 +87,7 @@ async function buildPairContext({ stateDir, logsDir, roadmapReader }) {
  * Pure function — easy to test without spawning a process.
  */
 function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, name }) {
-  const args = [];
+  const args = ['--dangerously-skip-permissions'];
 
   if (resume) {
     args.push('--resume', resume);
