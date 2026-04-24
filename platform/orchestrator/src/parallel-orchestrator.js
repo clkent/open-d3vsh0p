@@ -608,22 +608,66 @@ class ParallelOrchestrator {
     await this.gitOps.ensureWorktreeIgnored(this.cliOptions.projectDir);
 
     // Auto-park [HUMAN] items before running groups — no agent budget wasted
+    // Group Z items (user testing checkpoints) are non_blocking — orchestrator continues past them
+    // All other HUMAN items are blocking — orchestrator waits for human completion
     for (const group of phase.groups) {
       for (const item of group.items) {
         if (item.status === 'pending' && item.isHuman) {
+          const isGroupZ = group.letter === 'Z';
+          const classification = isGroupZ ? 'non_blocking' : 'blocking';
           await this.triage.parkItem(item.id, {
             reason: '[HUMAN] tagged — requires manual intervention',
-            triageClassification: 'non_blocking',
-            triageReason: '[HUMAN] items are always non-blocking'
+            triageClassification: classification,
+            triageReason: isGroupZ
+              ? '[HUMAN] checkpoint in Group Z — non-blocking'
+              : '[HUMAN] prerequisite — blocks dependent phases until completed'
           });
           item.status = 'parked';
 
           await this.logger.log('info', 'human_item_auto_parked', {
             requirementId: item.id,
-            description: item.description
+            description: item.description,
+            classification
           });
         }
       }
+    }
+
+    // Check if this phase has only blocking HUMAN items and no agent-executable work
+    const hasPendingAgentWork = phase.groups.some(g =>
+      g.items.some(i => i.status === 'pending')
+    );
+    const blockingHumanIds = [];
+    for (const group of phase.groups) {
+      for (const item of group.items) {
+        if (item.status === 'parked' && item.isHuman && group.letter !== 'Z') {
+          blockingHumanIds.push(item.id);
+        }
+      }
+    }
+    if (!hasPendingAgentWork && blockingHumanIds.length > 0) {
+      const itemList = blockingHumanIds.map(id => `  - ${id}`).join('\n');
+      await this.logger.log('warn', 'human_prerequisite_phase_blocked', {
+        phaseNumber: phase.number,
+        phaseLabel: phase.label,
+        blockingItems: blockingHumanIds
+      });
+      console.log('');
+      console.log('  ⏸  Human action required before agents can continue:');
+      console.log('');
+      for (const id of blockingHumanIds) {
+        const item = phase.groups.flatMap(g => g.items).find(i => i.id === id);
+        console.log(`    - ${id} — ${item ? item.description : '(unknown)'}`);
+      }
+      console.log('');
+      console.log('  Complete these items, then run: ./devshop action ' + this.cliOptions.projectId);
+      console.log('  Restart with: ./devshop run ' + this.cliOptions.projectId);
+      console.log('');
+      this.monitor.requestPause({
+        reason: 'blocking_park',
+        blockingItem: { id: blockingHumanIds[0], error: 'Human prerequisite items must be completed before agent work can proceed' }
+      });
+      return;
     }
 
     // Execute [SPIKE] items before normal group execution

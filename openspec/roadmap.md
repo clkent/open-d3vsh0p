@@ -194,6 +194,7 @@
 
 ### Group A: Intervention Classification
 - [ ] `runtime-human-intervention` — Classify parked items as human-needed vs code-bug, generate actionable instructions, update roadmap, surface in action command
+- [ ] `human-prerequisite-blocking` — Block orchestrator on prerequisite HUMAN items (non-Group-Z), pause for human action before dependent phases start
 
 ## Phase XV: Figma Design Workflow
 <!-- depends: Phase IX -->
