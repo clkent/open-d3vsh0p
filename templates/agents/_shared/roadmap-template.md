@@ -43,7 +43,7 @@ Below is a complete roadmap for a fictional "TaskFlow" project demonstrating all
 ### Group Z: User Testing
 - [ ] `test-phase-3` — [HUMAN] Create a task at /tasks/new, assign to a team member, open in second browser, confirm real-time update appears within 2 seconds
 
-## Phase IV: Polish
+## Phase IV: Notifications & Discovery
 <!-- depends: Phase III -->
 
 ### Group A: Notifications
