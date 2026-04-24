@@ -265,13 +265,72 @@ describe('ParallelOrchestrator', () => {
   });
 
   describe('_createAgentOnEvent', () => {
-    it('returns undefined when no broadcast server running', () => {
+    it('returns undefined when no broadcast server and watch disabled', () => {
       const { po } = createOrchestrator({
         broadcastServer: { isRunning: false }
       });
 
       const result = po._createAgentOnEvent('Jordan', 'req-1', 'Group A');
       assert.equal(result, undefined);
+    });
+
+    it('returns a callback when watch enabled even without broadcast server', () => {
+      const { po } = createOrchestrator({
+        broadcastServer: { isRunning: false },
+        cliOptions: { watch: true }
+      });
+
+      const result = po._createAgentOnEvent('Jordan', 'req-1', 'Group A');
+      assert.notEqual(result, undefined);
+      assert.equal(typeof result, 'function');
+    });
+
+    it('calls formatter when watch enabled', () => {
+      const logs = [];
+      const originalLog = console.log;
+      console.log = (...args) => logs.push(args.join(' '));
+
+      try {
+        const { po } = createOrchestrator({
+          broadcastServer: { isRunning: false },
+          cliOptions: { watch: true }
+        });
+
+        const onEvent = po._createAgentOnEvent('Jordan', 'req-1', 'Group A');
+        onEvent({
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Working on it' }] }
+        });
+
+        assert.ok(logs.some(l => l.includes('[Jordan]') && l.includes('(req-1)') && l.includes('Working on it')));
+      } finally {
+        console.log = originalLog;
+      }
+    });
+
+    it('does not call formatter when watch disabled', () => {
+      const logs = [];
+      const originalLog = console.log;
+      console.log = (...args) => logs.push(args.join(' '));
+
+      try {
+        const broadcasts = [];
+        const { po } = createOrchestrator({
+          broadcastServer: { isRunning: true, broadcast: (msg) => broadcasts.push(msg) }
+        });
+
+        const onEvent = po._createAgentOnEvent('Jordan', 'req-1', 'Group A');
+        onEvent({
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Working on it' }] }
+        });
+
+        // Should broadcast but not print to console
+        assert.equal(broadcasts.length, 1);
+        assert.ok(!logs.some(l => l.includes('[Jordan]')));
+      } finally {
+        console.log = originalLog;
+      }
     });
 
     it('returns a function that broadcasts when server is running', () => {

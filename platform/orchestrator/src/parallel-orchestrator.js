@@ -1437,13 +1437,21 @@ class ParallelOrchestrator {
   }
 
   _createAgentOnEvent(persona, requirementId, group) {
-    if (!this.broadcastServer || !this.broadcastServer.isRunning) return undefined;
+    const watchEnabled = this.cliOptions.watch;
+    const hasBroadcast = this.broadcastServer && this.broadcastServer.isRunning;
+
+    if (!hasBroadcast && !watchEnabled) return undefined;
 
     const bsRef = this.broadcastServer;
     const sessionId = this.stateMachine.getState().sessionId;
 
+    // Lazy-load shared formatter only when watch is enabled
+    const formatAgentEvent = watchEnabled
+      ? require('./infra/format-events').formatAgentEvent
+      : null;
+
     return (event) => {
-      bsRef.broadcast({
+      const envelope = {
         source: 'agent',
         sessionId,
         timestamp: new Date().toISOString(),
@@ -1451,7 +1459,15 @@ class ParallelOrchestrator {
         requirementId,
         group,
         event
-      });
+      };
+
+      if (hasBroadcast) {
+        bsRef.broadcast(envelope);
+      }
+
+      if (formatAgentEvent) {
+        formatAgentEvent(envelope);
+      }
     };
   }
 

@@ -28,7 +28,8 @@ async function main() {
       timeout: { type: 'string' },
       schedule: { type: 'string' },
       unschedule: { type: 'boolean', default: false },
-      design: { type: 'boolean', default: false }
+      design: { type: 'boolean', default: false },
+      watch: { type: 'boolean', default: true }
     }
   });
 
@@ -126,7 +127,8 @@ async function main() {
     preview: project.preview || null,
     broadcastPort: values['watch-port'] ? parseInt(values['watch-port'], 10)
       : values.port ? parseInt(values.port, 10) : undefined,
-    reportStatus: values.status || false
+    reportStatus: values.status || false,
+    watch: values.watch || false
   };
 
   // Dispatch to command handler
@@ -250,6 +252,7 @@ Options:
   --type <type>            Cadence type for cadence run (weekly/monthly)
   --dry-run                Preview without making changes
   --no-consolidate         Skip auto-consolidation of session branch to main
+  --no-watch               Hide live agent activity (shown by default)
   --watch-port <port>      Broadcast server port (default: 3100)
   --port <port>            Port for watch command to connect to (default: 3100)
   --status                 Show report queue status (for report command)
