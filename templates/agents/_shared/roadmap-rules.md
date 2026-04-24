@@ -1,26 +1,5 @@
 ### Roadmap Format
 
-The roadmap MUST follow this exact format:
-
-```markdown
-# Roadmap: [Project Name]
-
-## Phase I: [Label]
-
-### Group A: [Label]
-- [ ] `requirement-id` — Description of the work item
-- [ ] `requirement-id` — Description of the work item
-
-### Group B: [Label]
-- [ ] `requirement-id` — Description of the work item
-
-## Phase II: [Label]
-<!-- depends: Phase I -->
-
-### Group A: [Label]
-- [ ] `requirement-id` — Description of the work item
-```
-
 **Roadmap rules:**
 - `## Phase N: Label` — phases execute sequentially (Phase II waits for Phase I to finish)
 - `### Group X: Label` — groups within a phase execute in parallel by separate agents
@@ -31,9 +10,11 @@ The roadmap MUST follow this exact format:
 - Group items that must be built together (shared dependencies) into the same group
 - NO time estimates anywhere
 
-### CRITICAL: Writing Roadmaps for Agents
+### How Your Roadmap Gets Used
 
-The roadmap drives an **automated orchestrator** that spawns AI coding agents. Each work item gets assigned to an agent that implements it, runs tests, commits, and gets a code review — all without human involvement. Write roadmaps with this in mind:
+Your `roadmap.md` is parsed by `roadmap-reader.js` which splits by `##` (phases) and `###` (groups). The orchestrator runs phases sequentially — Phase II waits for Phase I to finish. Groups within a phase run in parallel, each assigned to a separate AI agent. Every `- [ ]` item becomes a task: one agent implements it, writes tests, commits, and gets a code review — all automated, no human in the loop. If your format doesn't match what the parser expects, items get silently skipped or the validator rejects the roadmap entirely. Getting the structure right matters more than getting the prose right.
+
+### CRITICAL: Writing Roadmaps for Agents
 
 **One concern per item:**
 - Each item should do ONE thing. If you use "and" to connect two features, they should probably be separate items
@@ -47,20 +28,7 @@ The roadmap drives an **automated orchestrator** that spawns AI coding agents. E
 - NEVER bundle multiple specs into a single roadmap item, even if the features are related
 - The orchestrator assigns one agent per roadmap item. Bundled items cannot be parallelized and force sequential work where parallel work was possible
 
-**Example — well-sized vs poorly-sized items:**
-- **Good:** `- [ ] \`location-create-form\` — Build location creation form with zipcode input and hardiness zone display`
-- **Too big:** `- [ ] \`location-management\` — Build complete location CRUD with creation, editing, deletion, multi-location support, and primary location selection`
-- **Too small:** `- [ ] \`add-zipcode-field\` — Add a zipcode input field to the location form`
-
-**Example — bundled specs vs properly split items:**
-- **BAD:** You wrote 3 specs (event-generation, calendar-integration, dashboard-enhancement) but created 1 roadmap item:
-  `- [ ] \`calendar-plant-integration\` — Connect plants to calendar with auto-generated events, real data queries, and enhanced dashboard cards`
-  This forces one agent to do all three features sequentially.
-- **GOOD:** Split to match the specs — 3 specs = 3 roadmap items:
-  `- [ ] \`event-auto-generation\` — Auto-generate planting events when users add plants to their collection`
-  `- [ ] \`calendar-real-data\` — Replace mock calendar data with real database queries filtered by location`
-  `- [ ] \`dashboard-plant-cards\` — Rich plant cards showing next activity, growth stage, and days since planted`
-  Now three agents can work in parallel.
+See the complete template example that follows for properly sized and split items.
 
 **Don't say "with tests" in descriptions:**
 - Every item includes tests automatically — the orchestrator won't merge code without passing tests and a code review
@@ -79,6 +47,7 @@ The roadmap drives an **automated orchestrator** that spawns AI coding agents. E
 - If something requires human action, mark it with `[HUMAN]` in the description: `- [ ] \`get-api-keys\` — [HUMAN] Obtain API keys for Trefle, OpenWeather, and USDA services`
 - `[HUMAN]` items will be parked by the orchestrator so they don't block agent work
 - Group all `[HUMAN]` items in their own group so they don't clutter agent work groups
+- If an entire phase would be all `[HUMAN]` items (e.g., provisioning cloud infrastructure), that's valid — mark every item and the orchestrator will park the phase. The next phase's agent work will only start after you complete and unpark those items.
 
 **Don't save testing for the end:**
 - Each implementation item includes writing tests for that feature as part of the agent cycle
@@ -98,22 +67,13 @@ The roadmap drives an **automated orchestrator** that spawns AI coding agents. E
 - [ ] `test-phase-2` — [HUMAN] Verify the create-location flow: go to /locations/new, enter a valid zipcode, confirm hardiness zone displays, submit, and verify the location appears on /locations
 ```
 
-**Bad checkpoint example:**
-```markdown
-### Group Z: User Testing
-- [ ] `test-phase-2` — [HUMAN] Test that locations work
-```
-Checkpoints must be specific: name the pages/endpoints/flows, the inputs to use, and the expected outcomes.
+Checkpoints must be specific: name the pages/endpoints/flows, the inputs to use, and the expected outcomes. See the template example for well-written checkpoints.
 
 **Groups in a phase MUST be independent:**
 - Since groups run in parallel, no group may depend on output from another group in the same phase
 - If Group B needs files, scaffolding, APIs, or any artifact that Group A creates, Group B belongs in the **next** phase
 - Common trap: putting project scaffolding (`project-setup`) in the same phase as feature groups that write code into the scaffolded project. The feature agents start immediately and fail because the project doesn't exist yet
 - When in doubt, put it in the next phase — an extra phase is cheaper than a failed parallel execution
-
-**Example — broken intra-phase dependency:**
-- **BAD:** Phase II has Group A (`project-setup` — scaffold React Native project) and Group B (`camera-interface` — build camera screen). Group B's agent starts at the same time as Group A and tries to write into a project that doesn't exist yet.
-- **GOOD:** Phase II is `project-setup` only. Phase III has `camera-interface` and `image-validation` as parallel groups — by then the scaffold exists.
 
 **Keep phases lean:**
 - 3-5 phases is ideal for an MVP. More phases = more sequential bottlenecks
@@ -181,3 +141,5 @@ Before presenting the roadmap, verify ALL of the following:
 5. **Spike validation:** If you created spike items, verify they are genuinely uncertain (not just hard). No more than 3 spikes.
 6. **Testing checkpoints:** Every phase has a `Group Z: User Testing` with a `test-phase-N` checkpoint. Descriptions are specific (pages, flows, expected outcomes), not vague.
 7. **No intra-phase dependencies:** For each phase with multiple groups, verify that no group depends on output from another group in the same phase. If Group B needs files that Group A creates, move Group B to the next phase. Common case: project scaffolding must complete before feature groups can write code into it.
+
+The complete example that follows demonstrates all of these rules in context.

@@ -30,6 +30,8 @@ If multiple features are being planned, create `{{PROJECT_DIR}}/openspec/roadmap
 
 {{>roadmap-rules}}
 
+{{>roadmap-template}}
+
 ### Step 4: Validate Your Work
 - Run: `openspec validate <change-name>`
 - Run: `openspec show <change-name>` to review

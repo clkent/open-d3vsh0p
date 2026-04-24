@@ -42,6 +42,17 @@ Riley's PM prompts SHALL include a numbered self-audit checklist that Riley MUST
 - **WHEN** Riley finishes drafting a roadmap where every spec maps to exactly one item and no group exceeds 4 items
 - **THEN** the self-audit checklist SHALL pass and Riley SHALL present the roadmap
 
+### Roadmap Template Example
+Riley's PM prompts SHALL include a complete roadmap template demonstrating proper end-to-end structure including: Roman numeral phases, `<!-- depends: -->` comments, spike phase with `[SPIKE]` item, implementation phases with parallel groups, `[HUMAN]` items in dedicated groups, Group Z user testing checkpoints with specific descriptions, kebab-case IDs, em-dash separators, and 3-5 items per group.
+
+#### Scenario: Template included in rendered prompt
+- **WHEN** the orchestrator renders kickoff-prompt.md, brain-dump-prompt.md, or system-prompt.md
+- **THEN** the rendered output SHALL contain the complete roadmap template example after the roadmap rules section
+
+#### Scenario: Template validates cleanly
+- **WHEN** the roadmap template content is passed through `findNearMisses()`, `findHeadingLevelIssues()`, `findMissingGroups()`, and `findTimelineEstimates()`
+- **THEN** all functions SHALL return empty arrays (zero validation errors)
+
 ### Brain-Dump Prompt Alignment Rule
 The brain-dump prompt SHALL include a shorter version of the spec-roadmap alignment rule. When adding new specs during a brain-dump session, corresponding roadmap items MUST also be added.
 
