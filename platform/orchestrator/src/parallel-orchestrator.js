@@ -67,6 +67,8 @@ class ParallelOrchestrator {
     this.healthGate = new HealthGate(this);
     this.repair = new RepairOrchestrator(this);
     this.triage = new ItemTriage(this);
+    this._keypressHandler = null;
+    this._stdinWasRaw = false;
   }
 
   async run() {
@@ -303,6 +305,9 @@ class ParallelOrchestrator {
 
     // Install signal handlers for graceful pause (Ctrl+C)
     this.monitor.installSignalHandlers();
+
+    // Install keypress listener for pair mode interrupt
+    this._installKeypressListener();
 
     // Health check gate (fresh sessions only)
     if (!this.cliOptions.resume) {
@@ -550,6 +555,12 @@ class ParallelOrchestrator {
         // If no restart, session ends
         await this._completeSession();
         return;
+      }
+
+      // Check if user requested pair mode
+      if (stopAfterPhase.stop && stopAfterPhase.reason === 'pause_for_pair') {
+        await this._handlePairInterrupt();
+        continue; // Re-enter phase loop — roadmap re-read happens at top
       }
 
       // Phase gate: run integration health check if any items merged in this phase
@@ -921,7 +932,19 @@ class ParallelOrchestrator {
       for (const item of pendingItems) {
         // Check consumption before each item
         const stopCheck = this.monitor.shouldStop();
-        if (stopCheck.stop) {
+        if (stopCheck.stop && stopCheck.reason === 'pause_for_pair') {
+          await this._handlePairInterrupt();
+          // After pair, re-check — user might have resolved things or budget may be hit
+          const recheck = this.monitor.shouldStop();
+          if (recheck.stop) {
+            await this.logger.log('warn', 'group_stopped', {
+              group: `Group ${group.letter}`,
+              reason: recheck.reason
+            });
+            break;
+          }
+          // Otherwise continue with next item
+        } else if (stopCheck.stop) {
           await this.logger.log('warn', 'group_stopped', {
             group: `Group ${group.letter}`,
             reason: stopCheck.reason
@@ -1415,7 +1438,105 @@ class ParallelOrchestrator {
     }
   }
 
+  _installKeypressListener() {
+    if (!process.stdin.isTTY) return;
+    this._stdinWasRaw = process.stdin.isRaw;
+    this._keypressHandler = (data) => {
+      const key = data.toString();
+      if (key === 'p' || key === 'P') {
+        this.monitor.requestPause({ reason: 'pause_for_pair' });
+        console.log('\n  Pausing for pair mode — finishing current work...');
+      }
+    };
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on('data', this._keypressHandler);
+  }
+
+  _removeKeypressListener() {
+    if (!this._keypressHandler) return;
+    process.stdin.removeListener('data', this._keypressHandler);
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(this._stdinWasRaw || false);
+      process.stdin.pause();
+    }
+    this._keypressHandler = null;
+  }
+
+  async _handlePairInterrupt() {
+    this._removeKeypressListener();
+    this.monitor.removeSignalHandlers();
+
+    await this.logger.log('info', 'pair_interrupt_started', {
+      message: 'User requested pair mode'
+    });
+
+    console.log('');
+    console.log('  === Entering Pair Mode ===');
+    console.log('  Morgan has context about your current session.');
+    console.log('  Use /exit or Ctrl+C to return to the orchestrator.');
+    console.log('');
+
+    // Build context for Morgan
+    const state = this.stateMachine.getState();
+    const { buildPairContext, spawnClaudeTerminal } = require('./commands/pair');
+    const { getOrchestratorPaths } = require('./session/path-utils');
+    const { TemplateEngine } = require('./agents/template-engine');
+    const fs = require('fs/promises');
+
+    const { logsDir } = getOrchestratorPaths(this.cliOptions);
+    const stateDir = path.join(this.cliOptions.activeAgentsDir, 'orchestrator');
+    const progressContext = await buildPairContext({
+      stateDir,
+      logsDir,
+      roadmapReader: this.roadmapReader
+    });
+
+    const templateEngine = new TemplateEngine(this.cliOptions.templatesDir);
+    let techStack = 'Not specified';
+    try { techStack = await this.openspec.parseTechStack(); } catch {}
+
+    const templateVars = {
+      PROJECT_ID: this.cliOptions.projectId,
+      PROJECT_DIR: this.cliOptions.projectDir,
+      TECH_STACK: techStack,
+      GITHUB_REPO: this.cliOptions.githubRepo || '',
+      REQUIREMENTS: progressContext
+        ? `Here is the current project state:\n${progressContext}`
+        : ''
+    };
+
+    const promptPath = path.join(this.cliOptions.templatesDir, 'principal-engineer', 'pair-prompt.md');
+    const promptTemplate = await fs.readFile(promptPath, 'utf-8');
+    const renderedPrompt = templateEngine.renderString(promptTemplate, templateVars);
+
+    const pairAgentConfig = this.config.agents?.['pair'] || this.config.agents?.['principal-engineer'];
+
+    await spawnClaudeTerminal({
+      projectDir: this.cliOptions.projectDir,
+      appendSystemPrompt: renderedPrompt,
+      model: pairAgentConfig?.model,
+      name: `Morgan — ${this.cliOptions.projectId}`
+    });
+
+    console.log('');
+    console.log('  === Resuming Orchestrator ===');
+    console.log('');
+
+    await this.logger.log('info', 'pair_interrupt_ended', {
+      message: 'Pair session ended, resuming orchestration'
+    });
+
+    // Restore orchestrator state
+    this.monitor.clearPause();
+    this.monitor.installSignalHandlers();
+    this._installKeypressListener();
+  }
+
   async _completeSession() {
+    // Remove keypress listener
+    this._removeKeypressListener();
+
     // Clear progress timer
     if (this._progressTimer) {
       clearInterval(this._progressTimer);
