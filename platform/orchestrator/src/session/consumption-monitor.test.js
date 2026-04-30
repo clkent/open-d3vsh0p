@@ -242,4 +242,33 @@ describe('ConsumptionMonitor', () => {
       assert.ok(snap.elapsedMs >= 0, 'elapsedMs should be non-negative');
     });
   });
+
+  describe('clearPause', () => {
+    it('resets pause state so shouldStop returns false', () => {
+      monitor.requestPause({ reason: 'pause_for_pair' });
+      assert.equal(monitor.shouldStop().stop, true);
+      assert.equal(monitor.shouldStop().reason, 'pause_for_pair');
+
+      monitor.clearPause();
+      assert.equal(monitor.shouldStop().stop, false);
+    });
+
+    it('does not clear budget exhaustion', () => {
+      monitor.recordInvocation(15, 1000); // exceeds 10 USD limit
+      monitor.requestPause({ reason: 'pause_for_pair' });
+
+      monitor.clearPause();
+      const result = monitor.shouldStop();
+      assert.equal(result.stop, true);
+      assert.equal(result.reason, 'budget_exhausted');
+    });
+
+    it('clears blocking item', () => {
+      monitor.requestPause({ reason: 'blocking_park', blockingItem: { id: 'x', error: 'fail' } });
+      monitor.clearPause();
+      const result = monitor.shouldStop();
+      assert.equal(result.stop, false);
+      assert.equal(result.blockingItem, undefined);
+    });
+  });
 });
