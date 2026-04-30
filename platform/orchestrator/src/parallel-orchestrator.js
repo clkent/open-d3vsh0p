@@ -314,6 +314,7 @@ class ParallelOrchestrator {
       const healthCheckOk = await this.healthGate.runHealthCheckGate();
       if (!healthCheckOk) {
         // Health check failed and could not be repaired — session ends
+        this._removeKeypressListener();
         this.monitor.removeSignalHandlers();
         const failState = this.stateMachine.getState();
         await this._pushSessionBranch('health_check_failed');
@@ -543,6 +544,9 @@ class ParallelOrchestrator {
         await this.logger.log('warn', 'blocking_park_entering_fix', {
           blockingItem: stopAfterPhase.blockingItem
         });
+
+        // Clean up keypress listener before pair fallback may spawn
+        this._removeKeypressListener();
 
         // Push completed work before entering fix flow
         await this._pushSessionBranch('blocking_park');
