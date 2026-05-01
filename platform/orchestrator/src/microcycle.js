@@ -106,6 +106,11 @@ class Microcycle {
       if (impl.action === 'park') return impl.result;
       if (impl.action === 'continue') continue;
 
+      // Pause check — after implement, code is written but not yet tested
+      if (this._shouldPauseForPair()) {
+        return { status: 'pause_for_pair', cost: state.totalCost, attempts: state.attempt, phase: 'post_implement' };
+      }
+
       // Import verification
       const imports = await this._doImportVerification(state, requirementId, workBranch, retryLimits);
       if (imports.action === 'park') return imports.result;
@@ -115,6 +120,11 @@ class Microcycle {
       const test = await this._doTest(state, requirementId, workBranch, retryLimits);
       if (test.action === 'park') return test.result;
       if (test.action === 'continue') continue;
+
+      // Pause check — after tests pass, code is tested and ready to commit
+      if (this._shouldPauseForPair()) {
+        return { status: 'pause_for_pair', cost: state.totalCost, attempts: state.attempt, phase: 'post_test' };
+      }
 
       // Commit
       const commit = await this._doCommit(state, requirementId, requirement, workBranch, retryLimits);
@@ -788,6 +798,11 @@ class Microcycle {
     const pattern = this._analyzeFailurePattern(attemptHistory);
     if (!pattern) return baseError;
     return `${baseError}\n\nFailure pattern: ${pattern}`;
+  }
+
+  _shouldPauseForPair() {
+    const check = this.monitor.shouldStop();
+    return check.stop && check.reason === 'pause_for_pair';
   }
 
   async _emitProgress(phase, requirementId, thought) {
