@@ -43,6 +43,36 @@ async function reconcile({ gitOps, roadmapReader, stateMachine, projectDir, logg
     item => item.status === 'pending' && mergedIds.has(item.id)
   );
 
+  // Sync parked items from roadmap into state (items marked [!] in roadmap
+  // but not yet in state.parked — e.g., manually parked between sessions)
+  const state = stateMachine.getState();
+  const stateParkedIds = new Set((state.requirements.parked || []).map(p => typeof p === 'string' ? p : p.id));
+  const roadmapParkedItems = allItems.filter(i => i.status === 'parked' && !stateParkedIds.has(i.id));
+
+  if (roadmapParkedItems.length > 0) {
+    const newParkedEntries = roadmapParkedItems.map(i => ({
+      id: i.id,
+      triageClassification: 'blocking',
+      triageReason: 'Parked in roadmap — synced at session start',
+      reason: 'Parked in roadmap'
+    }));
+    const updatedParked = [...(state.requirements.parked || []), ...newParkedEntries];
+    const parkedIdSet = new Set(roadmapParkedItems.map(i => i.id));
+    const updatedPending = state.requirements.pending.filter(id => !parkedIdSet.has(id));
+    await stateMachine.update({
+      requirements: {
+        ...state.requirements,
+        parked: updatedParked,
+        pending: updatedPending
+      }
+    });
+
+    await logger.log('info', 'roadmap_parked_synced', {
+      count: roadmapParkedItems.length,
+      items: roadmapParkedItems.map(i => i.id)
+    });
+  }
+
   if (needsReconciliation.length === 0) return { reconciled: 0, items: [] };
 
   // Mark each as complete in the roadmap
@@ -52,13 +82,13 @@ async function reconcile({ gitOps, roadmapReader, stateMachine, projectDir, logg
 
   const reconciledIds = needsReconciliation.map(i => i.id);
 
-  // Update state machine
-  const state = stateMachine.getState();
-  const newCompleted = [...state.requirements.completed, ...reconciledIds];
-  const newPending = state.requirements.pending.filter(id => !reconciledIds.includes(id));
+  // Update state machine (re-read state in case parked sync modified it)
+  const currentState = stateMachine.getState();
+  const newCompleted = [...currentState.requirements.completed, ...reconciledIds];
+  const newPending = currentState.requirements.pending.filter(id => !reconciledIds.includes(id));
   await stateMachine.update({
     requirements: {
-      ...state.requirements,
+      ...currentState.requirements,
       completed: newCompleted,
       pending: newPending
     }

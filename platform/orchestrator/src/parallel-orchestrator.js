@@ -203,9 +203,19 @@ class ParallelOrchestrator {
       // Transition to LOADING_ROADMAP
       const allItems = this.roadmapReader.getAllItems(roadmap);
       const pendingIds = allItems.filter(i => i.status === 'pending').map(i => i.id);
+      const completedIds = allItems.filter(i => i.status === 'complete').map(i => i.id);
+
+      // Sync parked items from roadmap into state with blocking classification
+      // so _getBlockingIdsFromState() enforces phase dependencies
+      const parkedItems = allItems.filter(i => i.status === 'parked').map(i => ({
+        id: i.id,
+        triageClassification: i.isHuman ? (i.description && i.description.includes('Group Z') ? 'non_blocking' : 'blocking') : 'blocking',
+        triageReason: 'Parked in roadmap at session start',
+        reason: 'Parked in roadmap'
+      }));
 
       await this.stateMachine.transition('SELECTING_REQUIREMENT', {
-        requirements: { pending: pendingIds, inProgress: null, completed: [], parked: [] },
+        requirements: { pending: pendingIds, inProgress: null, completed: completedIds, parked: parkedItems },
         targetRequirements: this.cliOptions.requirements || null,
         currentPhase: null,
         activeAgents: []
