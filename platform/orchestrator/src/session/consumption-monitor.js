@@ -144,16 +144,6 @@ class ConsumptionMonitor {
     };
   }
 
-  /**
-   * Clear a pause request so the orchestrator can resume.
-   * Only clears the pause flag — budget/time limits are unaffected.
-   */
-  clearPause() {
-    this._pauseRequested = false;
-    this._pauseReason = null;
-    this._blockingItem = null;
-  }
-
   getStateForPersistence() {
     return {
       totalCostUsd: this.totalCostUsd,

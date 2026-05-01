@@ -264,57 +264,6 @@ describe('ParallelOrchestrator', () => {
     });
   });
 
-  describe('_installKeypressListener', () => {
-    it('does not install when stdin is not a TTY', () => {
-      const { po } = createOrchestrator();
-      const origIsTTY = process.stdin.isTTY;
-      try {
-        process.stdin.isTTY = false;
-        po._installKeypressListener();
-        assert.equal(po._keypressHandler, null);
-      } finally {
-        process.stdin.isTTY = origIsTTY;
-      }
-    });
-
-    it('keypress p triggers pause_for_pair on monitor', () => {
-      let pauseRequest = null;
-      const { po } = createOrchestrator({
-        monitor: {
-          shouldStop: () => ({ stop: false }),
-          requestPause: (req) => { pauseRequest = req; },
-          getSnapshot: () => ({}),
-          recordInvocation: () => {},
-          installSignalHandlers: () => {},
-          removeSignalHandlers: () => {},
-          resetCycleCost: () => {}
-        }
-      });
-
-      // Simulate the handler directly (can't set raw mode in test)
-      po._keypressHandler = po._keypressHandler || ((data) => {
-        const key = data.toString();
-        if (key === 'p' || key === 'P') {
-          po.monitor.requestPause({ reason: 'pause_for_pair' });
-        }
-      });
-
-      // Simulate pressing 'p'
-      po._keypressHandler(Buffer.from('p'));
-      assert.notEqual(pauseRequest, null);
-      assert.equal(pauseRequest.reason, 'pause_for_pair');
-    });
-  });
-
-  describe('_removeKeypressListener', () => {
-    it('clears handler reference', () => {
-      const { po } = createOrchestrator();
-      po._keypressHandler = () => {};
-      po._removeKeypressListener();
-      assert.equal(po._keypressHandler, null);
-    });
-  });
-
   describe('_createAgentOnEvent', () => {
     it('returns undefined when no broadcast server and watch disabled', () => {
       const { po } = createOrchestrator({

@@ -103,9 +103,6 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   if (config.resume) {
     console.log(`  Resume:     yes`);
   }
-  if (process.stdin.isTTY) {
-    console.log(`  Pair:       Press p to pair with Morgan`);
-  }
 
   // Show estimated cost from historical data
   try {
