@@ -52,7 +52,7 @@ async function reconcile({ gitOps, roadmapReader, stateMachine, projectDir, logg
   if (roadmapParkedItems.length > 0) {
     const newParkedEntries = roadmapParkedItems.map(i => ({
       id: i.id,
-      triageClassification: 'blocking',
+      triageClassification: (i.isHuman && i.groupLetter === 'Z') ? 'non_blocking' : 'blocking',
       triageReason: 'Parked in roadmap — synced at session start',
       reason: 'Parked in roadmap'
     }));

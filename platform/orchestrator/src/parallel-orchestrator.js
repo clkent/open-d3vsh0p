@@ -209,7 +209,7 @@ class ParallelOrchestrator {
       // so _getBlockingIdsFromState() enforces phase dependencies
       const parkedItems = allItems.filter(i => i.status === 'parked').map(i => ({
         id: i.id,
-        triageClassification: i.isHuman ? (i.description && i.description.includes('Group Z') ? 'non_blocking' : 'blocking') : 'blocking',
+        triageClassification: i.isHuman ? (i.groupLetter === 'Z' ? 'non_blocking' : 'blocking') : 'blocking',
         triageReason: 'Parked in roadmap at session start',
         reason: 'Parked in roadmap'
       }));
