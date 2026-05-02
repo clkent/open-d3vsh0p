@@ -45,9 +45,9 @@ See the complete template example that follows for properly sized and split item
 - Agents can write code, tests, configs, and documentation
 - Agents CANNOT: sign up for external services, obtain API keys, configure DNS, set up hosting accounts, conduct user testing, or do manual QA
 - If something requires human action, mark it with `[HUMAN]` in the description: `- [ ] \`get-api-keys\` — [HUMAN] Obtain API keys for Trefle, OpenWeather, and USDA services`
-- `[HUMAN]` items will be parked by the orchestrator so they don't block agent work
-- Group all `[HUMAN]` items in their own group so they don't clutter agent work groups
-- If an entire phase would be all `[HUMAN]` items (e.g., provisioning cloud infrastructure), that's valid — mark every item and the orchestrator will park the phase. The next phase's agent work will only start after you complete and unpark those items.
+- `[HUMAN]` items that are prerequisites for agent work (API keys, cloud provisioning) go in the Human Prerequisites phase — the orchestrator will block until you complete them
+- `[HUMAN]` items in Group Z (user testing checkpoints) are non-blocking — the orchestrator continues past them
+- Group all non-checkpoint `[HUMAN]` items in their own group so they don't clutter agent work groups
 
 **Don't save testing for the end:**
 - Each implementation item includes writing tests for that feature as part of the agent cycle
@@ -89,9 +89,20 @@ Checkpoints must be specific: name the pages/endpoints/flows, the inputs to use,
 - Performance optimization, design system, error handling, and deployment are independent concerns — give them separate groups or phases
 - Every phase should have the same structural discipline as Phase I
 
+### Phase Ordering Convention
+
+Roadmap phases follow a fixed ordering. Include only the phases that apply — skip any that don't, and renumber sequentially:
+
+1. **Spikes** (if any) — technical unknowns investigated by Morgan before committing to an approach
+2. **Human Prerequisites** (if any) — API keys, service provisioning, cloud setup, or anything agents need before they can code. This phase blocks the orchestrator — agent work will not start until you complete these items and restart
+3. **Foundation** — database, auth, core models, project scaffolding
+4. **Feature phases** — implementation work in vertical slices with parallel groups
+
+If a project has no spikes and no human prerequisites, Phase I is Foundation. If it has spikes but no human prerequisites, Phase I is Spikes and Phase II is Foundation. Always renumber — no gaps.
+
 ### Prioritization Principles
 
-1. **Foundation first** — database, auth, and core models before features that depend on them
+1. **Spikes → human prerequisites → foundation → features** — this ordering is mandatory, not a suggestion
 2. **Vertical slices over horizontal layers** — "create-location flow (API + form + validation)" beats "all API endpoints" then "all forms"
 3. **Independent features in parallel** — if two features don't share code, they can be in the same phase as different groups
 4. **One concern per item** — something one agent can implement, test, and get reviewed in one cycle. If you need "and" to describe it, split it
@@ -127,8 +138,8 @@ Some features involve genuine technical unknowns — unfamiliar APIs, novel algo
 - `[SPIKE]` items are investigated by Morgan, not implementation agents
 - The orchestrator auto-pauses after the spike phase for human review
 - Spike descriptions must be specific about WHAT to investigate
-- Spikes always go in the first phase (Phase I)
-- If nothing is genuinely uncertain, skip the spike phase entirely — go straight to implementation
+- Spikes are always the first phase in the roadmap (see Phase Ordering Convention)
+- If nothing is genuinely uncertain, skip the spike phase entirely — go straight to human prerequisites or foundation
 
 ### Self-Audit Checklist
 

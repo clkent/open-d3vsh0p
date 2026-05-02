@@ -12,22 +12,29 @@ Below is a complete roadmap for a fictional "TaskFlow" project demonstrating all
 ### Group Z: User Testing
 - [ ] `test-phase-1` — [HUMAN] Review spike findings and confirm architecture decisions before implementation begins
 
-## Phase II: Foundation
+## Phase II: Human Prerequisites
 <!-- depends: Phase I -->
+
+### Group A: External Services
+- [ ] `get-smtp-credentials` — [HUMAN] Obtain SMTP credentials for transactional email service
+- [ ] `get-stripe-keys` — [HUMAN] Create Stripe account and obtain test API keys for payment integration
+
+### Group Z: User Testing
+- [ ] `test-phase-2` — [HUMAN] Confirm all API keys and credentials are stored in .env and accessible to the project
+
+## Phase III: Foundation
+<!-- depends: Phase II -->
 
 ### Group A: Data Layer
 - [ ] `task-schema` — Database schema for tasks with title, status, assignee, due date, and priority fields
 - [ ] `user-auth` — Email/password authentication with JWT token issuance and refresh
 - [ ] `team-schema` — Team membership model with roles (admin, member) and invite flow
 
-### Group B: Human Setup
-- [ ] `get-smtp-credentials` — [HUMAN] Obtain SMTP credentials for transactional email service
-
 ### Group Z: User Testing
-- [ ] `test-phase-2` — [HUMAN] Verify auth flow: register at /signup, confirm JWT returned, refresh token works, invalid credentials rejected
+- [ ] `test-phase-3` — [HUMAN] Verify auth flow: register at /signup, confirm JWT returned, refresh token works, invalid credentials rejected
 
-## Phase III: Core Features
-<!-- depends: Phase II -->
+## Phase IV: Core Features
+<!-- depends: Phase III -->
 
 ### Group A: Task Management
 - [ ] `task-create-form` — Create task form with title, description, priority picker, and due date selector
@@ -41,10 +48,10 @@ Below is a complete roadmap for a fictional "TaskFlow" project demonstrating all
 - [ ] `presence-indicators` — Show online team members and who is viewing each task
 
 ### Group Z: User Testing
-- [ ] `test-phase-3` — [HUMAN] Create a task at /tasks/new, assign to a team member, open in second browser, confirm real-time update appears within 2 seconds
+- [ ] `test-phase-4` — [HUMAN] Create a task at /tasks/new, assign to a team member, open in second browser, confirm real-time update appears within 2 seconds
 
-## Phase IV: Notifications & Discovery
-<!-- depends: Phase III -->
+## Phase V: Notifications & Discovery
+<!-- depends: Phase IV -->
 
 ### Group A: Notifications
 - [ ] `email-notifications` — Transactional emails for task assignment, due date reminders, and mentions
@@ -55,5 +62,5 @@ Below is a complete roadmap for a fictional "TaskFlow" project demonstrating all
 - [ ] `saved-filters` — Save and name custom filter combinations for quick access from sidebar
 
 ### Group Z: User Testing
-- [ ] `test-phase-4` — [HUMAN] Assign a task to yourself, verify email arrives, check in-app notification appears, search for the task by partial title, confirm result highlights match
+- [ ] `test-phase-5` — [HUMAN] Assign a task to yourself, verify email arrives, check in-app notification appears, search for the task by partial title, confirm result highlights match
 ```
