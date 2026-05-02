@@ -95,17 +95,6 @@
 ### Group G: Microcycle Resilience
 - [x] `microcycle-salvage-check` — Salvage completed work when agent fails due to context overflow (tests pass + commits exist)
 
-## Phase VII: Platform Services
-<!-- depends: Phase III -->
-
-### Group A: API Layer
-- [x] `rest-api` — REST API for programmatic access to DevShop
-
-### Group B: Real-time
-- [x] `live-broadcast` — WebSocket broadcast server, stream-json agent output, watch command
-- [x] `session-progress-visibility` — Milestone notifications, progress line, "go look" alerts in watch command
-- [ ] `realtime-updates` — Web dashboard, agent activity visualization (depends on live-broadcast)
-
 ## Phase VIII: Roadmap Integrity
 <!-- depends: Phase VI -->
 
@@ -178,6 +167,17 @@
 ### Group B: Test Coverage
 - [x] `test-coverage-integrity` — Comprehensive test coverage with test integrity guardrails, priority-ordered by module criticality
 
+## Phase VII: Platform Services
+<!-- depends: Phase III -->
+
+### Group A: API Layer
+- [x] `rest-api` — REST API for programmatic access to DevShop
+
+### Group B: Real-time
+- [x] `live-broadcast` — WebSocket broadcast server, stream-json agent output, watch command
+- [x] `session-progress-visibility` — Milestone notifications, progress line, "go look" alerts in watch command
+- [ ] `realtime-updates` — Web dashboard, agent activity visualization (depends on live-broadcast)
+
 ## Phase XIII: Build & Quality Validation
 <!-- depends: Phase VI -->
 
@@ -196,13 +196,7 @@
 - [ ] `runtime-human-intervention` — Classify parked items as human-needed vs code-bug, generate actionable instructions, update roadmap, surface in action command
 - [ ] `human-prerequisite-blocking` — Block orchestrator on prerequisite HUMAN items (non-Group-Z), pause for human action before dependent phases start
 
-## Phase XV: Interactive Agent Sessions
-<!-- depends: Phase XI -->
-
-### Group A: Riley CLI Mode
-- [ ] `riley-cli-session` — Replace Riley's in-process agent chat with spawning Claude Code CLI (like Morgan pair mode), enabling native tool use, streaming output, and consistent interactive experience across kickoff and plan commands
-
-## Phase XVI: Figma Design Workflow
+## Phase XV: Figma Design Workflow
 <!-- depends: Phase IX -->
 
 ### Group A: Design Foundations
