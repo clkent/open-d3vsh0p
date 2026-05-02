@@ -498,6 +498,60 @@ describe('RoadmapReader', () => {
       await fs.rm(tmpDir, { recursive: true });
     });
 
+    it('preserves [HUMAN] parked items by default', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'roadmap-test-'));
+      const openspecDir = path.join(tmpDir, 'openspec');
+      await fs.mkdir(openspecDir, { recursive: true });
+      await fs.writeFile(path.join(openspecDir, 'roadmap.md'), [
+        '# Roadmap: Test',
+        '## Phase I: Foundation',
+        '### Group A: Core',
+        '- [!] `code-bug` — Agent failed on this',
+        '- [!] `needs-human` — [HUMAN] Obtain API keys',
+        '- [!] `another-bug` — Another agent failure',
+        '### Group Z: User Testing',
+        '- [!] `human-checkpoint` — [HUMAN] Review phase output'
+      ].join('\n'));
+
+      const tmpReader = new RoadmapReader(tmpDir);
+      const didReset = await tmpReader.resetParkedItems();
+      assert.equal(didReset, true);
+
+      const roadmap = await tmpReader.parse();
+      const groupA = roadmap.phases[0].groups[0].items;
+      const groupZ = roadmap.phases[0].groups[1].items;
+      assert.equal(groupA[0].status, 'pending');  // code-bug reset
+      assert.equal(groupA[1].status, 'parked');    // HUMAN preserved
+      assert.equal(groupA[2].status, 'pending');  // another-bug reset
+      assert.equal(groupZ[0].status, 'parked');    // HUMAN checkpoint preserved
+
+      await fs.rm(tmpDir, { recursive: true });
+    });
+
+    it('resets HUMAN items too when includeHuman is true', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'roadmap-test-'));
+      const openspecDir = path.join(tmpDir, 'openspec');
+      await fs.mkdir(openspecDir, { recursive: true });
+      await fs.writeFile(path.join(openspecDir, 'roadmap.md'), [
+        '# Roadmap: Test',
+        '## Phase I: Foundation',
+        '### Group A: Core',
+        '- [!] `code-bug` — Agent failed on this',
+        '- [!] `needs-human` — [HUMAN] Obtain API keys'
+      ].join('\n'));
+
+      const tmpReader = new RoadmapReader(tmpDir);
+      const didReset = await tmpReader.resetParkedItems({ includeHuman: true });
+      assert.equal(didReset, true);
+
+      const roadmap = await tmpReader.parse();
+      const items = roadmap.phases[0].groups[0].items;
+      assert.equal(items[0].status, 'pending');
+      assert.equal(items[1].status, 'pending');
+
+      await fs.rm(tmpDir, { recursive: true });
+    });
+
     it('returns false when no parked items exist', async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'roadmap-test-'));
       const openspecDir = path.join(tmpDir, 'openspec');
@@ -508,6 +562,24 @@ describe('RoadmapReader', () => {
         '### Group A: Core',
         '- [x] `done` — Completed',
         '- [ ] `pending` — Pending'
+      ].join('\n'));
+
+      const tmpReader = new RoadmapReader(tmpDir);
+      const didReset = await tmpReader.resetParkedItems();
+      assert.equal(didReset, false);
+
+      await fs.rm(tmpDir, { recursive: true });
+    });
+
+    it('returns false when only HUMAN parked items exist', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'roadmap-test-'));
+      const openspecDir = path.join(tmpDir, 'openspec');
+      await fs.mkdir(openspecDir, { recursive: true });
+      await fs.writeFile(path.join(openspecDir, 'roadmap.md'), [
+        '# Roadmap: Test',
+        '## Phase I: Foundation',
+        '### Group A: Core',
+        '- [!] `api-keys` — [HUMAN] Get API keys'
       ].join('\n'));
 
       const tmpReader = new RoadmapReader(tmpDir);

@@ -133,21 +133,6 @@ class ParallelOrchestrator {
           });
         }
       }
-
-      const didReset = await this.roadmapReader.resetParkedItems();
-      if (didReset) {
-        await this.logger.log('info', 'parked_items_reset', {
-          reason: '--fresh flag: parked items reset to pending',
-          failureHistoryCount: this._failureHistory ? this._failureHistory.size : 0
-        });
-      }
-    } else if (this.cliOptions.fresh) {
-      const didReset = await this.roadmapReader.resetParkedItems();
-      if (didReset) {
-        await this.logger.log('info', 'parked_items_reset', {
-          reason: '--fresh flag: parked items reset to pending'
-        });
-      }
     }
 
     // Parse roadmap
@@ -234,27 +219,36 @@ class ParallelOrchestrator {
         this.stateMachine.getState().sessionBranch
       );
 
-      // Reset parked items AFTER session branch creation, because createSessionBranch
-      // does git checkout main && git pull which overwrites any prior file changes.
-      if (this.cliOptions.fresh) {
-        const didReset = await this.roadmapReader.resetParkedItems();
-        if (didReset) {
-          // Re-parse roadmap and update state with newly pending items
-          const freshRoadmap = await this.roadmapReader.parse();
-          const freshItems = this.roadmapReader.getAllItems(freshRoadmap);
-          const freshPendingIds = freshItems.filter(i => i.status === 'pending').map(i => i.id);
-          await this.stateMachine.update({
-            requirements: { pending: freshPendingIds, inProgress: null, completed: [], parked: [] }
-          });
-          // Commit the roadmap reset to the session branch
-          await this.gitOps.commitAll(
-            this.cliOptions.projectDir,
-            'chore: reset parked items to pending for fresh session'
-          );
-          await this.logger.log('info', 'parked_items_reset_post_checkout', {
-            pendingCount: freshPendingIds.length
-          });
-        }
+      // Reset non-HUMAN parked items AFTER session branch creation, because
+      // createSessionBranch does git checkout main && git pull which overwrites
+      // any prior file changes. --fresh resets ALL parked items including HUMAN.
+      const resetOptions = this.cliOptions.fresh ? { includeHuman: true } : {};
+      const didReset = await this.roadmapReader.resetParkedItems(resetOptions);
+      if (didReset) {
+        // Re-parse roadmap and update state with newly pending items
+        const freshRoadmap = await this.roadmapReader.parse();
+        const freshItems = this.roadmapReader.getAllItems(freshRoadmap);
+        const freshPendingIds = freshItems.filter(i => i.status === 'pending').map(i => i.id);
+        const freshCompletedIds = freshItems.filter(i => i.status === 'complete').map(i => i.id);
+        // Preserve HUMAN parked items that stayed [!] in the roadmap
+        const remainingParked = freshItems.filter(i => i.status === 'parked').map(i => ({
+          id: i.id,
+          triageClassification: i.isHuman ? (i.groupLetter === 'Z' ? 'non_blocking' : 'blocking') : 'blocking',
+          triageReason: 'Parked in roadmap — HUMAN item preserved across session reset',
+          reason: 'Parked in roadmap'
+        }));
+        await this.stateMachine.update({
+          requirements: { pending: freshPendingIds, inProgress: null, completed: freshCompletedIds, parked: remainingParked }
+        });
+        // Commit the roadmap reset to the session branch
+        await this.gitOps.commitAll(
+          this.cliOptions.projectDir,
+          'chore: reset non-HUMAN parked items to pending for new session'
+        );
+        await this.logger.log('info', 'parked_items_reset_post_checkout', {
+          pendingCount: freshPendingIds.length,
+          remainingParkedCount: remainingParked.length
+        });
       }
     }
 

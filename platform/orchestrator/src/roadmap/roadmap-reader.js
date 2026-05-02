@@ -245,12 +245,17 @@ class RoadmapReader {
   }
 
   /**
-   * Reset all parked [!] items back to pending [ ] in the roadmap file.
-   * Used by --fresh to give previously-parked items another chance.
+   * Reset parked [!] items back to pending [ ] in the roadmap file.
+   * Skips items tagged [HUMAN] — those stay parked for human intervention.
+   * @param {object} [options]
+   * @param {boolean} [options.includeHuman=false] - If true, also reset [HUMAN] items (legacy --fresh behavior)
    */
-  async resetParkedItems() {
+  async resetParkedItems({ includeHuman = false } = {}) {
     let content = await fs.readFile(this.roadmapPath, 'utf-8');
-    const updated = content.replace(/^(- \[)!(]\s+`)/gm, '$1 $2');
+    const updated = content.replace(/^(- \[)!(]\s+`.+)$/gm, (match, prefix, rest) => {
+      if (!includeHuman && match.includes('[HUMAN]')) return match;
+      return prefix + ' ' + rest;
+    });
     if (updated !== content) {
       await fs.writeFile(this.roadmapPath, updated);
     }
