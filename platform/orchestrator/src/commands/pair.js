@@ -292,6 +292,9 @@ async function pairCommand(project, cliConfig) {
     } catch { /* git check failed, continue with exit */ }
   }
 
+  // Check for unmerged orchestrator session branches and offer to consolidate
+  await consolidateStaleSessionBranches(cliConfig.projectDir, cliConfig.projectId);
+
   console.log('');
   console.log('  Session complete.');
   await logger.log('info', 'pair_session_ended', { sessionId });
@@ -375,6 +378,78 @@ async function commitAndPush(projectDir, projectId) {
     console.log('  PR merged.');
   } catch (err) {
     console.error(`  Warning: Git commit/push failed: ${err.message}`);
+  }
+}
+
+/**
+ * Check for unmerged orchestrator session branches with work ahead of main.
+ * Offers to consolidate each one so completed work doesn't get lost on next run.
+ */
+async function consolidateStaleSessionBranches(projectDir, projectId) {
+  try {
+    // Find local devshop/session-* branches
+    const { stdout: branchList } = await execFileAsync(
+      'git', ['branch', '--list', 'devshop/session-*', '--format=%(refname:short)'],
+      { cwd: projectDir }
+    );
+    const sessionBranches = branchList.trim().split('\n').filter(Boolean);
+    if (sessionBranches.length === 0) return;
+
+    // Check which have commits ahead of main
+    const staleBranches = [];
+    for (const branch of sessionBranches) {
+      try {
+        const { stdout: log } = await execFileAsync(
+          'git', ['log', '--oneline', `main..${branch}`],
+          { cwd: projectDir }
+        );
+        if (log.trim()) {
+          const commitCount = log.trim().split('\n').length;
+          staleBranches.push({ branch, commitCount });
+        }
+      } catch {
+        // Branch comparison failed — skip
+      }
+    }
+
+    if (staleBranches.length === 0) return;
+
+    console.log('');
+    console.log('  Unmerged session branches with work:');
+    for (const { branch, commitCount } of staleBranches) {
+      console.log(`    ${branch} (${commitCount} commit${commitCount > 1 ? 's' : ''} ahead)`);
+    }
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const choice = await new Promise(resolve =>
+      rl.question('\n  Consolidate these to main? [y/n] ', resolve)
+    );
+    rl.close();
+
+    if (choice.trim().toLowerCase() !== 'y') return;
+
+    const { GitOps } = require('../git/git-ops');
+    const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+    const gitOps = new GitOps(logger);
+
+    // Ensure we're on main before consolidating
+    await execFileAsync('git', ['checkout', 'main'], { cwd: projectDir });
+    await execFileAsync('git', ['pull', 'origin', 'main'], { cwd: projectDir, timeout: 120000 });
+
+    for (const { branch } of staleBranches) {
+      try {
+        await gitOps.consolidateToMain(projectDir, branch, {
+          projectId,
+          completed: [],
+          parked: []
+        });
+        console.log(`    Consolidated ${branch}`);
+      } catch (err) {
+        console.log(`    Failed to consolidate ${branch}: ${err.message}`);
+      }
+    }
+  } catch {
+    // Non-critical — don't block pair exit
   }
 }
 
