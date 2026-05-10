@@ -276,15 +276,48 @@ class GitOps {
   }
 
   /**
+   * Wait for CI checks to pass on a PR.
+   * Runs `gh pr checks --watch --fail-fast` and returns the result.
+   *
+   * @param {string} projectDir
+   * @param {string} prUrl - PR URL or number
+   * @param {number} timeoutMs - Max time to wait (default: 10 minutes)
+   * @returns {{ passed: boolean, failedChecks: string[] }}
+   */
+  async waitForChecks(projectDir, prUrl, timeoutMs = 600000) {
+    try {
+      await this._exec('gh', [
+        'pr', 'checks', prUrl, '--watch', '--fail-fast'
+      ], { cwd: projectDir, timeout: timeoutMs });
+      return { passed: true, failedChecks: [] };
+    } catch (err) {
+      // Exit code 8 = checks still pending (timeout), exit code 1 = checks failed
+      // Try to get failing check names from JSON output
+      const failedChecks = [];
+      try {
+        const { stdout } = await this._exec('gh', [
+          'pr', 'checks', prUrl, '--json', 'name,bucket', '--jq', '.[] | select(.bucket == "fail") | .name'
+        ], { cwd: projectDir, timeout: 30000 });
+        if (stdout.trim()) {
+          failedChecks.push(...stdout.trim().split('\n'));
+        }
+      } catch {
+        // Could not retrieve check names — continue with empty list
+      }
+      return { passed: false, failedChecks };
+    }
+  }
+
+  /**
    * Consolidate completed work from session branch to main.
-   * Pushes session branch, creates PR, merges to main.
+   * Pushes session branch, creates PR, waits for CI checks, then merges to main.
    *
    * @param {string} projectDir
    * @param {string} sessionBranch
-   * @param {object} context - { sessionId, projectId, completed, parked, totalCostUsd }
+   * @param {object} context - { sessionId, projectId, completed, parked, totalCostUsd, ciTimeoutMs }
    */
   async consolidateToMain(projectDir, sessionBranch, context) {
-    const { sessionId, projectId, completed = [], parked = [], totalCostUsd } = context;
+    const { sessionId, projectId, completed = [], parked = [], totalCostUsd, ciTimeoutMs } = context;
 
     // Check if session branch has commits ahead of main
     let logOutput;
@@ -329,7 +362,24 @@ class GitOps {
       '--body', prBody
     ], { cwd: projectDir });
 
-    await this.logger.log('info', 'consolidate_pr_created', { pr: prUrl.trim() });
+    const trimmedPrUrl = prUrl.trim();
+    await this.logger.log('info', 'consolidate_pr_created', { pr: trimmedPrUrl });
+
+    // Wait for CI checks to pass before merging
+    const checkResult = await this.waitForChecks(projectDir, trimmedPrUrl, ciTimeoutMs);
+
+    if (!checkResult.passed) {
+      const checkNames = checkResult.failedChecks.length > 0
+        ? ` Failing checks: ${checkResult.failedChecks.join(', ')}`
+        : '';
+      const message = `CI checks failed on ${trimmedPrUrl}. Fix in pair mode and merge manually.${checkNames}`;
+      console.log(`  ${message}`);
+      await this.logger.log('warn', 'consolidate_ci_failed', {
+        pr: trimmedPrUrl,
+        failedChecks: checkResult.failedChecks
+      });
+      return;
+    }
 
     // Merge PR
     await this._exec('gh', ['pr', 'merge', '--merge', '--delete-branch'], { cwd: projectDir });
