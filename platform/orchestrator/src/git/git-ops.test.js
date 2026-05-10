@@ -394,6 +394,72 @@ describe('GitOps', () => {
     });
   });
 
+  describe('waitForChecks', () => {
+    let execCalls;
+
+    beforeEach(() => {
+      execCalls = [];
+    });
+
+    it('returns passed:true when checks pass (exit 0)', async () => {
+      git._exec = async (cmd, args, opts) => {
+        execCalls.push({ cmd, args, opts });
+        return { stdout: '', stderr: '' };
+      };
+
+      const result = await git.waitForChecks('/proj', 'https://github.com/test/pr/1', 60000);
+      assert.equal(result.passed, true);
+      assert.deepEqual(result.failedChecks, []);
+      assert.ok(execCalls[0].args.includes('--watch'));
+      assert.ok(execCalls[0].args.includes('--fail-fast'));
+    });
+
+    it('returns passed:false with failedChecks when checks fail', async () => {
+      let callCount = 0;
+      git._exec = async (cmd, args, opts) => {
+        execCalls.push({ cmd, args });
+        callCount++;
+        if (callCount === 1) {
+          // gh pr checks --watch fails
+          throw new Error('exit code 1');
+        }
+        // gh pr checks --json returns failing check names
+        return { stdout: 'lint\nbuild\n', stderr: '' };
+      };
+
+      const result = await git.waitForChecks('/proj', 'https://github.com/test/pr/1');
+      assert.equal(result.passed, false);
+      assert.deepEqual(result.failedChecks, ['lint', 'build']);
+    });
+
+    it('returns passed:false on timeout (exit code 8)', async () => {
+      let callCount = 0;
+      git._exec = async (cmd, args, opts) => {
+        callCount++;
+        if (callCount === 1) {
+          const err = new Error('exit code 8');
+          err.code = 8;
+          throw err;
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      const result = await git.waitForChecks('/proj', 'https://github.com/test/pr/1');
+      assert.equal(result.passed, false);
+      assert.deepEqual(result.failedChecks, []);
+    });
+
+    it('returns passed:false when gh command fails entirely (network error)', async () => {
+      git._exec = async () => {
+        throw new Error('ECONNREFUSED');
+      };
+
+      const result = await git.waitForChecks('/proj', 'https://github.com/test/pr/1');
+      assert.equal(result.passed, false);
+      assert.deepEqual(result.failedChecks, []);
+    });
+  });
+
   describe('consolidateToMain', () => {
     let execCalls;
 
@@ -405,7 +471,7 @@ describe('GitOps', () => {
       };
     });
 
-    it('pushes session branch, creates PR, and merges when there are new commits', async () => {
+    it('pushes session branch, creates PR, waits for checks, and merges when checks pass', async () => {
       git._gitResults = [
         // log --oneline main..session
         { stdout: 'abc1234 merge: REQ-1\ndef5678 merge: REQ-2\n', stderr: '' },
@@ -436,9 +502,52 @@ describe('GitOps', () => {
       // Verify PR title includes session ID
       const titleIdx = execCalls[0].args.indexOf('--title') + 1;
       assert.ok(execCalls[0].args[titleIdx].includes('2026-02-18-04-40'));
-      // Verify gh pr merge was called
+      // Verify gh pr checks --watch was called
       assert.equal(execCalls[1].cmd, 'gh');
-      assert.ok(execCalls[1].args.includes('merge'));
+      assert.ok(execCalls[1].args.includes('checks'));
+      assert.ok(execCalls[1].args.includes('--watch'));
+      // Verify gh pr merge was called
+      assert.equal(execCalls[2].cmd, 'gh');
+      assert.ok(execCalls[2].args.includes('merge'));
+    });
+
+    it('skips merge when CI checks fail and leaves PR open', async () => {
+      git._gitResults = [
+        { stdout: 'abc1234 merge: REQ-1\n', stderr: '' },
+        { stdout: '', stderr: '' }
+      ];
+
+      let callCount = 0;
+      git._exec = async (cmd, args, opts) => {
+        execCalls.push({ cmd, args });
+        callCount++;
+        if (callCount === 1) {
+          // gh pr create succeeds
+          return { stdout: 'https://github.com/test/pr/1\n', stderr: '' };
+        }
+        if (callCount === 2) {
+          // gh pr checks --watch fails
+          throw new Error('checks failed');
+        }
+        if (callCount === 3) {
+          // gh pr checks --json returns failing checks
+          return { stdout: 'test-suite\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await git.consolidateToMain('/proj', 'devshop/session-123', {
+        projectId: 'proj-001',
+        completed: ['REQ-1']
+      });
+
+      // Should NOT have called merge
+      const mergeCall = execCalls.find(c => c.args.includes('merge'));
+      assert.equal(mergeCall, undefined);
+      // Should have logged the warning
+      assert.ok(logEntries.some(e => e.event === 'consolidate_ci_failed'));
+      const ciLog = logEntries.find(e => e.event === 'consolidate_ci_failed');
+      assert.deepEqual(ciLog.data.failedChecks, ['test-suite']);
     });
 
     it('skips when no new commits on session branch', async () => {
@@ -458,17 +567,38 @@ describe('GitOps', () => {
       assert.ok(logEntries.some(e => e.event === 'consolidate_no_new_work'));
     });
 
-    it('throws when PR merge fails', async () => {
+    it('merges immediately when no checks configured (exit 0 instant)', async () => {
+      git._gitResults = [
+        { stdout: 'abc1234 merge: REQ-1\n', stderr: '' },
+        { stdout: '', stderr: '' },
+        { stdout: '', stderr: '' },
+        { stdout: '', stderr: '' }
+      ];
+
+      await git.consolidateToMain('/proj', 'devshop/session-123', {
+        projectId: 'proj-001',
+        completed: ['REQ-1']
+      });
+
+      // checks --watch exits 0, merge proceeds
+      assert.ok(execCalls.some(c => c.args.includes('merge')));
+      assert.ok(logEntries.some(e => e.event === 'consolidate_merged'));
+    });
+
+    it('throws when PR merge fails after checks pass', async () => {
       git._gitResults = [
         { stdout: 'abc1234 merge: REQ-1\n', stderr: '' },
         { stdout: '', stderr: '' }
       ];
+
+      let callCount = 0;
       git._exec = async (cmd, args) => {
         execCalls.push({ cmd, args });
-        if (args.includes('merge')) {
-          throw new Error('merge conflict');
-        }
-        return { stdout: 'https://github.com/test/pr/1\n', stderr: '' };
+        callCount++;
+        if (callCount === 1) return { stdout: 'https://github.com/test/pr/1\n', stderr: '' }; // pr create
+        if (callCount === 2) return { stdout: '', stderr: '' }; // checks --watch passes
+        if (callCount === 3) throw new Error('merge conflict'); // merge fails
+        return { stdout: '', stderr: '' };
       };
 
       await assert.rejects(
@@ -502,6 +632,32 @@ describe('GitOps', () => {
       assert.ok(body.includes('location-editing'));
       assert.ok(body.includes('location-deletion'));
       assert.ok(body.includes('$8.75'));
+    });
+
+    it('uses custom ciTimeoutMs when provided', async () => {
+      git._gitResults = [
+        { stdout: 'abc1234 merge: REQ-1\n', stderr: '' },
+        { stdout: '', stderr: '' },
+        { stdout: '', stderr: '' },
+        { stdout: '', stderr: '' }
+      ];
+
+      let checksTimeout = null;
+      git._exec = async (cmd, args, opts) => {
+        execCalls.push({ cmd, args, opts });
+        if (args.includes('--watch')) {
+          checksTimeout = opts?.timeout;
+        }
+        return { stdout: 'https://github.com/test/pr/1\n', stderr: '' };
+      };
+
+      await git.consolidateToMain('/proj', 'devshop/session-123', {
+        projectId: 'proj-001',
+        completed: ['REQ-1'],
+        ciTimeoutMs: 300000
+      });
+
+      assert.equal(checksTimeout, 300000);
     });
   });
 });
