@@ -1,16 +1,16 @@
 const readline = require('readline');
 const path = require('path');
+const fs = require('fs/promises');
+const { randomUUID } = require('crypto');
 const { Logger } = require('../infra/logger');
-const { AgentRunner } = require('../agents/agent-runner');
 const { TemplateEngine } = require('../agents/template-engine');
-const { PmRunner } = require('../../../pm/src/pm-runner');
 const { ProjectScaffolder } = require('../runners/project-scaffolder');
 const { loadConfig } = require('../infra/config');
-const { BroadcastServer } = require('../infra/broadcast-server');
 const { execFile: execFileAsync } = require('../infra/exec-utils');
 const { generateSessionId } = require('../session/session-utils');
 const { loadProjectContext } = require('./context-loader');
-const { readMultiLineInput } = require('../infra/prompt-input');
+const { spawnClaudeTerminal, saveCliSession } = require('./cli-spawn');
+const { loadDevShopContext } = require('../../../pm/src/devshop-context');
 
 const DEVSHOP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const TEMPLATES_DIR = path.join(DEVSHOP_ROOT, 'templates', 'agents');
@@ -40,7 +40,6 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
   const logger = new Logger(`kickoff-${sessionId}`, logsDir);
   await logger.init();
 
-  const agentRunner = new AgentRunner(logger);
   const templateEngine = new TemplateEngine(TEMPLATES_DIR);
   const config = await loadConfig({});
 
@@ -64,281 +63,93 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
   console.log(`    Dir:  ${projectDir}`);
   console.log(`    Repo: ${githubRepo}`);
   console.log('');
+
+  // Step 2: Build Riley's system prompt with full DevShop context
+  const devshopContext = await loadDevShopContext({ warn: (msg) => console.error(`  Warning: ${msg}`) });
+  const projectContext = await loadProjectContext(projectDir);
+
+  const templateVars = {
+    PROJECT_ID: projectId,
+    PROJECT_DIR: projectDir,
+    GITHUB_REPO: githubRepo,
+    TECH_STACK: 'Not specified yet',
+    PROJECT_CONTEXT: projectContext,
+    DEVSHOP_CONTEXT: devshopContext
+  };
+
+  const promptPath = path.join(TEMPLATES_DIR, 'pm-agent', 'kickoff-prompt.md');
+  const promptTemplate = await fs.readFile(promptPath, 'utf-8');
+  const resolvedTemplate = await templateEngine._resolvePartials(promptTemplate);
+  const renderedPrompt = templateEngine.renderString(resolvedTemplate, templateVars);
+
+  const kickoffAgentConfig = config.agents?.pm || {};
+  const claudeSessionId = randomUUID();
+
   console.log('  Now tell Riley what you want to build.');
   console.log('  Have a product brief? Drop .md files into:');
   console.log(`    ${projectDir}/context/`);
   console.log('');
-  console.log('  Type your message and press Enter. For multi-line, keep typing — blank line sends.');
+  console.log('  Opening Claude Code terminal with Riley...');
   console.log('  Type "go" when ready to create specs and roadmap.');
-  console.log('  Type "push" to commit and push changes to GitHub.');
-  console.log('  Type "done" to exit (project is already scaffolded).');
+  console.log('  Use Ctrl+C or /exit to end the session.');
   console.log('==================================');
   console.log('');
 
-  // Step 2: Riley Q&A — single session, always in the project directory
-  // PmRunner injects DevShop context and sandboxes writes to project directory.
-  // Starts with read-only tools during Q&A; restored when the user types "go".
-  const agentSession = await PmRunner.createKickoffSession(agentRunner, templateEngine, {
-    projectDir,
-    projectId,
-    githubRepo,
-    config,
-    warn: (msg) => console.error(`  Warning: ${msg}`)
-  });
+  // Step 3: Interactive Riley session via Claude CLI
+  const stateDir = path.join(DEVSHOP_ROOT, 'active-agents', '_kickoff');
+  let reenter = true;
+  let resumeSessionId = null;
 
-  // Start broadcast server for watch command
-  const broadcastPort = 3100;
-  const broadcastServer = new BroadcastServer();
-  try {
-    await broadcastServer.start(broadcastPort);
-    if (broadcastServer.isRunning) {
-      console.log(`  Broadcasting on port ${broadcastPort} (use "watch" to monitor)`);
-    }
-  } catch {
-    // Non-fatal — kickoff session continues without broadcast
-  }
+  while (reenter) {
+    reenter = false;
 
-  const onEvent = broadcastServer.isRunning
-    ? (event) => {
-        broadcastServer.broadcast({
-          source: 'riley',
-          sessionId,
-          timestamp: new Date().toISOString(),
-          persona: 'Riley',
-          event
-        });
-      }
-    : undefined;
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  let totalCost = 0;
-  let turnCount = 0;
-
-  const exitCode = await new Promise((resolve) => {
-    const promptLoop = async () => {
-      while (true) {
-        const input = await readMultiLineInput(rl);
-        const trimmed = input.trim();
-
-        if (!trimmed) {
-          continue;
-        }
-
-        // "push" commits and pushes changes to GitHub
-        if (trimmed.toLowerCase() === 'push') {
-          console.log('');
-          console.log('  Pushing changes to GitHub...');
-          await commitAndPush(projectDir, projectId);
-          continue;
-        }
-
-        // "done" exits — project is already scaffolded
-        if (trimmed.toLowerCase() === 'done' || trimmed.toLowerCase() === 'exit') {
-          // Check for unpushed changes before exiting
-          try {
-            const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: projectDir });
-            if (status.trim()) {
-              console.log('');
-              console.log('  You have unpushed changes. Pushing to GitHub...');
-              await commitAndPush(projectDir, projectId);
-            }
-          } catch { /* git check failed, continue with exit */ }
-
-          if (broadcastServer.isRunning) {
-            try { await broadcastServer.stop(); } catch {}
-          }
-          console.log('');
-          console.log(`  Exiting. Project "${projectId}" is scaffolded but has no specs yet.`);
-          console.log(`  Run \`./devshop plan ${projectId}\` to create specs later.`);
-          console.log(`  Cost: $${totalCost.toFixed(2)}`);
-          console.log('');
-          rl.close();
-          resolve(0);
-          return;
-        }
-
-        // "go" triggers spec generation in the same session
-        if (trimmed.toLowerCase() === 'go') {
-          if (turnCount === 0) {
-            console.log('  Please describe your project first before typing "go".');
-            continue;
-          }
-
-          // Restore full tools for spec generation — Q&A phase was read-only
-          agentSession.config.allowedTools = ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit'];
-
-          try {
-            await generateSpecs(agentSession, projectId, projectDir, githubRepo, logger, totalCost, onEvent);
-          } catch (err) {
-            console.error(`  Error during spec generation: ${err.message}`);
-            await logger.log('error', 'kickoff_spec_failed', { error: err.message });
-          }
-          continue;
-        }
-
-        // Normal Q&A turn
-        turnCount++;
-        console.log('');
-        console.log('  Riley is thinking...');
-
-        try {
-          // Load context files on first turn (after user has had time to drop files)
-          const options = turnCount === 1 ? {
-            systemPromptTemplate: 'pm-agent',
-            promptFile: 'kickoff-prompt.md',
-            templateVars: {
-              PROJECT_ID: projectId,
-              PROJECT_DIR: projectDir,
-              GITHUB_REPO: githubRepo,
-              TECH_STACK: 'Not specified yet',
-              PROJECT_CONTEXT: await loadProjectContext(projectDir)
-            },
-            onEvent
-          } : { onEvent };
-
-          const result = await agentSession.chat(trimmed, options);
-          totalCost += result.cost || 0;
-
-          console.log('');
-          console.log(`  Riley: ${result.response}`);
-          console.log('');
-          console.log(`  [cost: $${(result.cost || 0).toFixed(3)} | total: $${totalCost.toFixed(3)}]`);
-        } catch (err) {
-          console.error(`  Error: ${err.message}`);
-        }
-      }
-    };
-
-    rl.on('close', () => {
-      // resolve is idempotent via Promise
+    await spawnClaudeTerminal({
+      projectDir,
+      appendSystemPrompt: renderedPrompt,
+      model: kickoffAgentConfig.model,
+      sessionId: resumeSessionId ? undefined : claudeSessionId,
+      resume: resumeSessionId,
+      name: `Riley — ${projectId} kickoff`
     });
 
-    promptLoop();
-  });
+    // After first run, any re-entry is a resume
+    const activeSessionId = resumeSessionId || claudeSessionId;
+    resumeSessionId = activeSessionId;
 
-  await logger.log('info', 'kickoff_session_ended', { totalCost, turnCount });
-  return exitCode;
-}
+    // Save session for reference
+    await saveCliSession(stateDir, activeSessionId, 'kickoff');
 
-/**
- * Generate specs and roadmap — continues the existing Riley session.
- */
-async function generateSpecs(agentSession, projectId, projectDir, githubRepo, logger, costSoFar, onEvent) {
-  const fs = require('fs/promises');
-  const path = require('path');
+    // Step 4: Post-session validation
+    const validationResult = await validateKickoffOutput(projectDir);
 
-  console.log('');
-  console.log('  Riley is creating specs and roadmap...');
-
-  const specPrompt = `Great — let's do this! Based on everything we've discussed, please create the OpenSpec files for this project now.
-
-Remember:
-- Project ID: ${projectId}
-- Project directory: ${projectDir}
-- GitHub repo: ${githubRepo}
-
-Create all files inside ${projectDir}/openspec/:
-1. project.md — project overview, tech stack, and high-level requirements
-2. specs/<capability>/spec.md — one spec file per capability
-3. roadmap.md — phased implementation plan
-4. conventions.md — actionable do/don't rules for the implementation agents (test framework, styling, imports, etc.)
-
-Be thorough — the implementation agents will work directly from these specs and conventions.`;
-
-  const result = await agentSession.chat(specPrompt, { onEvent });
-  costSoFar += result.cost || 0;
-
-  if (!result.success) {
-    console.error(`  Warning: Spec generation had issues: ${result.error}`);
-  }
-
-  // Verify all required files were created, retry if missing
-  const maxRetries = 3;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const missing = await findMissingFiles(projectDir);
-    if (missing.length === 0) {
+    if (!validationResult.passed) {
       console.log('');
-      console.log('  All specs and roadmap created!');
-      break;
-    }
-
-    if (attempt === maxRetries - 1) {
-      console.error(`  Warning: Still missing after ${maxRetries} attempts: ${missing.join(', ')}`);
-      console.error(`  Run \`./devshop plan ${projectId}\` to finish manually.`);
-      break;
-    }
-
-    console.log(`  Missing files: ${missing.join(', ')}. Asking Riley to continue...`);
-
-    const retryResult = await agentSession.chat(
-      `You're not done yet. The following required files are still missing:\n\n${missing.map(f => `- ${f}`).join('\n')}\n\nPlease create them now. All files go inside ${projectDir}/openspec/.`,
-      { onEvent }
-    );
-    costSoFar += retryResult.cost || 0;
-  }
-
-  // Validate requirements format — retry if project.md is missing or has unparseable requirements
-  const { validateRequirementsFormat, buildRequirementsFixPrompt } = require('../roadmap/requirements-format-checker');
-  const maxReqRetries = 3;
-  for (let attempt = 0; attempt < maxReqRetries; attempt++) {
-    const reqResult = await validateRequirementsFormat(projectDir);
-    if (reqResult.valid) {
-      if (attempt > 0) {
-        console.log('  Requirements format is now valid!');
+      console.log('  Post-session validation:');
+      for (const issue of validationResult.issues) {
+        console.log(`    ${issue}`);
       }
-      break;
-    }
 
-    if (attempt === maxReqRetries - 1) {
-      console.error(`  Warning: Requirements format still invalid after ${maxReqRetries} attempts.`);
-      console.error(`  Issues: ${reqResult.errors.join('; ')}`);
-      console.error(`  Run \`./devshop plan ${projectId}\` to fix manually.`);
-      break;
-    }
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const choice = await new Promise(resolve =>
+        rl.question('\n  [r]e-enter Claude to fix / [s]kip validation / [q]uit? ', resolve)
+      );
+      rl.close();
 
-    console.log(`  Requirements format has ${reqResult.errors.length} issue(s). Asking Riley to fix...`);
-
-    const fixPrompt = buildRequirementsFixPrompt(reqResult, projectDir);
-    const fixResult = await agentSession.chat(fixPrompt, { onEvent });
-    costSoFar += fixResult.cost || 0;
-  }
-
-  // Validate roadmap format — retry if Riley used freeform items instead of the required format
-  const { validateRoadmapFormat, buildRoadmapFixPrompt } = require('../roadmap/roadmap-format-checker');
-  const maxFormatRetries = 3;
-  for (let attempt = 0; attempt < maxFormatRetries; attempt++) {
-    const fmtResult = await validateRoadmapFormat(projectDir);
-    if (fmtResult.valid) {
-      if (attempt > 0) {
-        console.log('  Roadmap format is now valid!');
+      const c = choice.trim().toLowerCase();
+      if (c === 'r') {
+        reenter = true;
+        continue;
+      } else if (c === 'q') {
+        console.log('');
+        console.log(`  Exiting. Project "${projectId}" is scaffolded but may have incomplete specs.`);
+        await logger.log('info', 'kickoff_session_ended', { sessionId });
+        return 0;
       }
-      break;
+      // 's': fall through to bootstrap
     }
-
-    if (attempt === maxFormatRetries - 1) {
-      const issues = [...fmtResult.nearMisses, ...fmtResult.errors, ...(fmtResult.missingGroups || []),
-        ...(fmtResult.timelineEstimates || []).map(e => `Line ${e.line}: "${e.match}"`)];
-      console.error(`  Warning: Roadmap format still invalid after ${maxFormatRetries} attempts.`);
-      console.error(`  Issues: ${issues.join('; ')}`);
-      console.error(`  Run \`./devshop plan ${projectId}\` to fix manually.`);
-      break;
-    }
-
-    const issueCount = fmtResult.nearMisses.length + fmtResult.errors.length
-      + (fmtResult.missingGroups?.length || 0)
-      + (fmtResult.timelineEstimates?.length || 0);
-    console.log(`  Roadmap has ${issueCount} format issue(s). Asking Riley to fix...`);
-
-    const fixPrompt = buildRoadmapFixPrompt(fmtResult, projectDir);
-    const fixResult = await agentSession.chat(fixPrompt, { onEvent });
-    costSoFar += fixResult.cost || 0;
   }
 
-  // Generate enriched CLAUDE.md from conventions and project info
+  // Step 5: Generate enriched CLAUDE.md from conventions and project info
   try {
     await generateClaudeMd(projectDir);
     console.log('  CLAUDE.md enriched with project conventions.');
@@ -346,36 +157,95 @@ Be thorough — the implementation agents will work directly from these specs an
     console.error(`  Warning: Could not enrich CLAUDE.md: ${err.message}`);
   }
 
-  // Bootstrap: install and configure the tech stack specified in conventions
+  // Step 6: Bootstrap — install and configure the tech stack
+  const { AgentRunner } = require('../agents/agent-runner');
+  const agentRunner = new AgentRunner(logger);
+
   console.log('');
   console.log('  Setting up tech stack from conventions...');
 
-  const bootstrapResult = await bootstrapProject(agentSession.agentRunner, agentSession.templateEngine, {
+  const bootstrapResult = await bootstrapProject(agentRunner, templateEngine, {
     templatesDir: TEMPLATES_DIR,
-    projectDir: projectDir,
-    projectId: projectId
+    projectDir,
+    projectId
   }, logger);
-
-  costSoFar += bootstrapResult.cost || 0;
 
   if (bootstrapResult.buildPassed) {
     console.log('');
     console.log('  === Project Ready! ===');
     console.log('  Tech stack installed and verified — build and tests pass.');
-    console.log(`  Total cost: $${costSoFar.toFixed(2)}`);
   } else {
     console.log('');
     console.log('  === Specs Created (bootstrap had issues) ===');
     console.log('  Tech stack setup completed but build verification failed.');
     console.log('  You may need to fix config issues before running the orchestrator.');
-    console.log(`  Total cost: $${costSoFar.toFixed(2)}`);
   }
-  console.log('');
-  console.log('  Type "push" to commit and push to GitHub.');
-  console.log('  Type "done" to exit without pushing.');
-  console.log('');
 
+  // Step 7: Offer to push
+  try {
+    const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: projectDir });
+    if (status.trim()) {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const pushChoice = await new Promise(resolve =>
+        rl.question('\n  Push changes to GitHub? [y/n] ', resolve)
+      );
+      rl.close();
+
+      if (pushChoice.trim().toLowerCase() === 'y') {
+        await commitAndPush(projectDir, projectId);
+      }
+    }
+  } catch { /* git check failed */ }
+
+  console.log('');
+  await logger.log('info', 'kickoff_session_ended', { sessionId });
   return 0;
+}
+
+/**
+ * Validate the output of a kickoff session — check for required files and format.
+ * Returns { passed, issues } where issues is an array of human-readable strings.
+ */
+async function validateKickoffOutput(projectDir) {
+  const issues = [];
+
+  // Check required files
+  const missing = await findMissingFiles(projectDir);
+  if (missing.length > 0) {
+    for (const m of missing) {
+      issues.push(`Missing: ${m}`);
+    }
+  }
+
+  // Check requirements format
+  try {
+    const { validateRequirementsFormat } = require('../roadmap/requirements-format-checker');
+    const reqResult = await validateRequirementsFormat(projectDir);
+    if (!reqResult.valid) {
+      for (const err of reqResult.errors) {
+        issues.push(`Requirements: ${err}`);
+      }
+    }
+  } catch { /* no project.md */ }
+
+  // Check roadmap format
+  try {
+    const { validateRoadmapFormat } = require('../roadmap/roadmap-format-checker');
+    const fmtResult = await validateRoadmapFormat(projectDir);
+    if (!fmtResult.valid) {
+      const fmtIssues = [...fmtResult.nearMisses, ...fmtResult.errors,
+        ...(fmtResult.missingGroups || []),
+        ...(fmtResult.timelineEstimates || []).map(e => `Line ${e.line}: "${e.match}"`)];
+      for (const issue of fmtIssues) {
+        issues.push(`Roadmap: ${issue}`);
+      }
+    }
+  } catch { /* no roadmap */ }
+
+  return {
+    passed: issues.length === 0,
+    issues
+  };
 }
 
 /**
@@ -454,8 +324,6 @@ async function bootstrapProject(agentRunner, templateEngine, config, logger) {
  * Returns an array of human-readable descriptions of missing files.
  */
 async function findMissingFiles(projectDir) {
-  const fs = require('fs/promises');
-  const path = require('path');
   const missing = [];
 
   // Check project.md
@@ -488,7 +356,6 @@ async function findMissingFiles(projectDir) {
     if (specDirs.length === 0) {
       missing.push('openspec/specs/ (no spec directories found)');
     } else {
-      // Check each spec dir has a spec.md
       for (const dir of specDirs) {
         try {
           await fs.access(path.join(specsDir, dir.name, 'spec.md'));
@@ -553,9 +420,6 @@ async function commitAndPush(projectDir, projectId) {
  * will natively pick up, so orchestrator-injected prompts can stay minimal.
  */
 async function generateClaudeMd(projectDir) {
-  const fs = require('fs/promises');
-  const path = require('path');
-
   // Read project name from directory
   const projectName = path.basename(projectDir);
 
@@ -569,7 +433,6 @@ async function generateClaudeMd(projectDir) {
   let techStack = '';
   try {
     const projectMd = await fs.readFile(path.join(projectDir, 'openspec', 'project.md'), 'utf-8');
-    // Extract tech stack section if present
     const stackMatch = projectMd.match(/##\s*Tech(?:nology)?\s*Stack([\s\S]*?)(?=\n##|\n$|$)/i);
     if (stackMatch) {
       techStack = stackMatch[1].trim();
@@ -599,7 +462,7 @@ async function generateClaudeMd(projectDir) {
   content += `## Project Standards\n\n`;
   content += `Read \`openspec/conventions.md\` for the full project conventions — test framework, styling, imports, project structure, and patterns.\n\n`;
 
-  // Detect design skills (works whether installed via --design or manually)
+  // Detect design skills
   let hasDesignSkills = false;
   try {
     await fs.access(path.join(projectDir, '.claude', 'skills', 'frontend-design'));

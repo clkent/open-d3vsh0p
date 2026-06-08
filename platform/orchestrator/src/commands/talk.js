@@ -1,19 +1,16 @@
 const readline = require('readline');
 const path = require('path');
 const fs = require('fs/promises');
+const { randomUUID } = require('crypto');
 const { Logger } = require('../infra/logger');
-const { AgentRunner } = require('../agents/agent-runner');
 const { TemplateEngine } = require('../agents/template-engine');
-const { AgentSession } = require('../agents/agent-session');
 const { OpenSpecReader } = require('../roadmap/openspec-reader');
 const { RoadmapReader } = require('../roadmap/roadmap-reader');
 const { loadConfig } = require('../infra/config');
-const { BroadcastServer } = require('../infra/broadcast-server');
 const { execFile: execFileAsync } = require('../infra/exec-utils');
 const { generateSessionId } = require('../session/session-utils');
 const { getOrchestratorPaths } = require('../session/path-utils');
-const { readMultiLineInput } = require('../infra/prompt-input');
-const { autoFixBeforeCommit } = require('./plan');
+const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
 
 async function talkCommand(project, cliConfig) {
   console.log('');
@@ -28,7 +25,6 @@ async function talkCommand(project, cliConfig) {
   const logger = new Logger(`talk-${sessionId}`, logsDir);
   await logger.init();
 
-  const agentRunner = new AgentRunner(logger);
   const templateEngine = new TemplateEngine(cliConfig.templatesDir);
   const openspec = new OpenSpecReader(cliConfig.projectDir);
   const roadmapReader = new RoadmapReader(cliConfig.projectDir);
@@ -40,7 +36,8 @@ async function talkCommand(project, cliConfig) {
   let progressContext = '';
 
   // Read orchestrator state
-  const stateFilePath = path.join(cliConfig.activeAgentsDir, 'orchestrator', 'state.json');
+  const stateDir = path.join(cliConfig.activeAgentsDir, 'orchestrator');
+  const stateFilePath = path.join(stateDir, 'state.json');
   try {
     const raw = await fs.readFile(stateFilePath, 'utf-8');
     const state = JSON.parse(raw);
@@ -76,62 +73,8 @@ async function talkCommand(project, cliConfig) {
     }
   } catch {}
 
-  console.log('  Riley has context about your project\'s current progress.');
-  console.log('  Ask questions, request spec changes, or update the roadmap.');
-  console.log('');
-  console.log('  Type your message and press Enter. For multi-line, keep typing — blank line sends.');
-  console.log('  Type "done" or Ctrl+C to end.');
-  console.log('=====================');
-  console.log('');
-
-  // Load conventions for context refresh
-  let conventions = null;
-  try {
-    conventions = await fs.readFile(path.join(cliConfig.projectDir, 'openspec', 'conventions.md'), 'utf-8');
-  } catch { /* no conventions file */ }
-
-  const agentSession = new AgentSession(agentRunner, templateEngine, {
-    ...cliConfig,
-    pmModel: config.agents?.pm?.model || 'claude-sonnet-4-20250514',
-    pmBudgetUsd: config.agents?.pm?.maxBudgetUsd || 2.00,
-    pmTimeoutMs: config.agents?.pm?.timeoutMs || 300000,
-    contextRefresh: {
-      interval: 5,
-      persona: 'Riley, the PM',
-      projectId: cliConfig.projectId,
-      projectDir: cliConfig.projectDir,
-      conventions
-    }
-  });
-
-  // Start broadcast server for watch command
-  const broadcastPort = cliConfig.broadcastPort || 3100;
-  const broadcastServer = new BroadcastServer();
-  try {
-    await broadcastServer.start(broadcastPort);
-    if (broadcastServer.isRunning) {
-      console.log(`  Broadcasting on port ${broadcastPort} (use "watch" to monitor)`);
-    }
-  } catch {
-    // Non-fatal — talk session continues without broadcast
-  }
-
-  const onEvent = broadcastServer.isRunning
-    ? (event) => {
-        broadcastServer.broadcast({
-          source: 'riley',
-          sessionId,
-          timestamp: new Date().toISOString(),
-          persona: 'Riley',
-          event
-        });
-      }
-    : undefined;
-
-  // Try to resume existing PM session
-  const stateDir = path.join(cliConfig.activeAgentsDir, 'orchestrator');
-  await agentSession.loadSessionState(stateDir);
-
+  // Render system prompt
+  const talkAgentConfig = config.agents?.pm || {};
   const templateVars = {
     PROJECT_ID: cliConfig.projectId,
     PROJECT_DIR: cliConfig.projectDir,
@@ -140,83 +83,129 @@ async function talkCommand(project, cliConfig) {
     REQUIREMENTS: `You are in a mid-project conversation. Here is the current project progress:\n${progressContext}\n\nThe developer wants to discuss the project. Listen carefully, and if they want to update specs or roadmap, make the changes directly.`
   };
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+  const renderedPrompt = await templateEngine.renderAgentPrompt('pm-agent', templateVars);
 
-  let totalCost = 0;
-  let turnCount = 0;
+  // Determine session: resume or new
+  let claudeSessionId = null;
+  let resumeSessionId = null;
 
-  const promptLoop = async () => {
-    while (true) {
-      const input = await readMultiLineInput(rl);
-      const trimmed = input.trim();
-
-      if (!trimmed) {
-        continue;
-      }
-
-      if (trimmed.toLowerCase() === 'done' || trimmed.toLowerCase() === 'exit') {
-        // Auto-fix roadmap/requirements format issues before exiting
-        const fixResult = await autoFixBeforeCommit(cliConfig.projectDir, agentSession, onEvent);
-        totalCost += fixResult.cost;
-
-        // Check for unpushed changes before exiting
-        try {
-          const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: cliConfig.projectDir });
-          if (status.trim()) {
-            console.log('');
-            console.log('  You have unpushed changes. Pushing to GitHub...');
-            await commitAndPush(cliConfig.projectDir, cliConfig.projectId);
-          }
-        } catch { /* git check failed, continue with exit */ }
-
-        await agentSession.saveSessionState(stateDir);
-        if (broadcastServer.isRunning) {
-          try { await broadcastServer.stop(); } catch {}
-        }
-        console.log('');
-        console.log(`  Session saved. Total cost: $${totalCost.toFixed(2)}, Turns: ${turnCount}`);
-        console.log('');
-        rl.close();
-        return;
-      }
-
-      turnCount++;
+  if (cliConfig.resume) {
+    resumeSessionId = await loadCliSession(stateDir, 'talk');
+    if (resumeSessionId) {
+      console.log('  Resuming previous talk session...');
       console.log('');
-      console.log('  Riley is thinking...');
+    }
+  }
 
-      try {
-        const result = await agentSession.chat(trimmed, {
-          systemPromptTemplate: 'pm-agent',
-          templateVars,
-          onEvent
-        });
-        totalCost += result.cost || 0;
+  if (!resumeSessionId) {
+    claudeSessionId = randomUUID();
+  }
 
-        console.log('');
-        console.log(`  Riley: ${result.response}`);
-        console.log('');
-        console.log(`  [cost: $${(result.cost || 0).toFixed(3)} | total: $${totalCost.toFixed(3)}]`);
-      } catch (err) {
-        console.error(`  Error: ${err.message}`);
+  // Display banner
+  console.log('  Riley has context about your project\'s current progress.');
+  console.log('  Opening Claude Code terminal with project context...');
+  console.log('  Use Ctrl+C or /exit to end the session.');
+  console.log('=====================');
+  console.log('');
+
+  // Main session loop (supports re-entry for format fix)
+  let reenter = true;
+  while (reenter) {
+    reenter = false;
+
+    await spawnClaudeTerminal({
+      projectDir: cliConfig.projectDir,
+      appendSystemPrompt: renderedPrompt,
+      model: talkAgentConfig.model,
+      sessionId: claudeSessionId,
+      resume: resumeSessionId,
+      name: `Riley — ${cliConfig.projectId}`
+    });
+
+    // After first run, any re-entry is a resume
+    const activeSessionId = claudeSessionId || resumeSessionId;
+    if (claudeSessionId) {
+      resumeSessionId = claudeSessionId;
+      claudeSessionId = null;
+    }
+
+    // Save session for future resume
+    await saveCliSession(stateDir, activeSessionId, 'talk');
+
+    // Post-session: validate format and handle changes
+    try {
+      const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: cliConfig.projectDir });
+      const hasChanges = status.trim().length > 0;
+
+      if (hasChanges) {
+        // Run format validators
+        let formatPassed = true;
+        const formatIssues = [];
+
+        try {
+          const { validateRoadmapFormat } = require('../roadmap/roadmap-format-checker');
+          const fmtResult = await validateRoadmapFormat(cliConfig.projectDir);
+          if (!fmtResult.valid) {
+            formatPassed = false;
+            const issues = [...fmtResult.nearMisses, ...fmtResult.errors,
+              ...(fmtResult.missingGroups || []),
+              ...(fmtResult.timelineEstimates || []).map(e => `Line ${e.line}: "${e.match}"`)];
+            formatIssues.push(`Roadmap: ${issues.join('; ')}`);
+          }
+        } catch { /* no roadmap */ }
+
+        try {
+          const { validateRequirementsFormat } = require('../roadmap/requirements-format-checker');
+          const reqResult = await validateRequirementsFormat(cliConfig.projectDir);
+          if (!reqResult.valid) {
+            formatPassed = false;
+            formatIssues.push(`Requirements: ${reqResult.errors.join('; ')}`);
+          }
+        } catch { /* no project.md */ }
+
+        if (!formatPassed) {
+          console.log('');
+          console.log('  Format validation FAILED:');
+          for (const issue of formatIssues) {
+            console.log(`    ${issue}`);
+          }
+
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          const choice = await new Promise(resolve =>
+            rl.question('\n  [r]e-enter Claude to fix / [p]ush anyway / [q]uit? ', resolve)
+          );
+          rl.close();
+
+          const c = choice.trim().toLowerCase();
+          if (c === 'r') {
+            reenter = true;
+            continue;
+          } else if (c !== 'p') {
+            console.log('');
+            console.log('  Session complete. Changes left uncommitted.');
+            await logger.log('info', 'talk_session_ended', { sessionId });
+            return 0;
+          }
+        }
+
+        // Offer to push
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const pushChoice = await new Promise(resolve =>
+          rl.question('\n  Push changes to GitHub? [y/n] ', resolve)
+        );
+        rl.close();
+
+        if (pushChoice.trim().toLowerCase() === 'y') {
+          await commitAndPush(cliConfig.projectDir, cliConfig.projectId);
+        }
       }
-    }
-  };
+    } catch { /* git check failed, continue with exit */ }
+  }
 
-  rl.on('close', async () => {
-    await agentSession.saveSessionState(stateDir);
-    if (broadcastServer.isRunning) {
-      try { await broadcastServer.stop(); } catch {}
-    }
-    await logger.log('info', 'talk_session_ended', { totalCost, turnCount });
-  });
-
-  return new Promise((resolve) => {
-    rl.on('close', () => resolve(0));
-    promptLoop();
-  });
+  console.log('');
+  console.log('  Session complete.');
+  await logger.log('info', 'talk_session_ended', { sessionId });
+  return 0;
 }
 
 /**
