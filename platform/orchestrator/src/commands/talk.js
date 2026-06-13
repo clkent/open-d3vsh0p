@@ -12,6 +12,75 @@ const { generateSessionId } = require('../session/session-utils');
 const { getOrchestratorPaths } = require('../session/path-utils');
 const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
 
+/**
+ * Build project context string for Riley's talk session.
+ */
+async function buildTalkContext({ stateDir, logsDir, roadmapReader }) {
+  let context = '';
+
+  // Read orchestrator state
+  const stateFilePath = path.join(stateDir, 'state.json');
+  try {
+    const raw = await fs.readFile(stateFilePath, 'utf-8');
+    const state = JSON.parse(raw);
+    context += `\n## Current Session State\n`;
+    context += `- Session: ${state.sessionId}\n`;
+    context += `- State: ${state.state}\n`;
+    context += `- Completed: ${state.requirements.completed.length} requirements\n`;
+    context += `- Pending: ${state.requirements.pending.length} requirements\n`;
+    context += `- Parked: ${state.requirements.parked.length} requirements\n`;
+    if (state.requirements.completed.length > 0) {
+      context += `- Completed items: ${state.requirements.completed.join(', ')}\n`;
+    }
+    if (state.requirements.parked.length > 0) {
+      const parkedIds = state.requirements.parked.map(p => typeof p === 'string' ? p : p.id);
+      context += `- Parked items: ${parkedIds.join(', ')}\n`;
+    }
+  } catch {
+    context += '\nNo active session found.\n';
+  }
+
+  // Read roadmap status
+  try {
+    const hasRoadmap = await roadmapReader.exists();
+    if (hasRoadmap) {
+      const roadmap = await roadmapReader.parse();
+      context += `\n## Roadmap: ${roadmap.title}\n`;
+      for (const phase of roadmap.phases) {
+        const items = phase.groups.flatMap(g => g.items);
+        const done = items.filter(i => i.status === 'complete').length;
+        const total = items.length;
+        context += `- Phase ${phase.number} (${phase.label}): ${done}/${total} complete\n`;
+      }
+    }
+  } catch {}
+
+  // Read parked items with failure reasons from latest session summary
+  try {
+    const files = await fs.readdir(logsDir);
+    const summaryFiles = files.filter(f => f.endsWith('-summary.json')).sort();
+    if (summaryFiles.length > 0) {
+      const latestSummary = summaryFiles[summaryFiles.length - 1];
+      const raw = await fs.readFile(path.join(logsDir, latestSummary), 'utf-8');
+      const summary = JSON.parse(raw);
+      if (summary.parked && summary.parked.length > 0) {
+        context += `\n## Parked Items (from last session)\n`;
+        for (const item of summary.parked) {
+          const id = typeof item === 'string' ? item : item.id;
+          const error = typeof item === 'object' ? item.error : null;
+          context += `- **${id}**`;
+          if (error) {
+            context += `: ${error}`;
+          }
+          context += '\n';
+        }
+      }
+    }
+  } catch {}
+
+  return context;
+}
+
 async function talkCommand(project, cliConfig) {
   console.log('');
   console.log('=== Talk to Riley ===');
@@ -20,7 +89,7 @@ async function talkCommand(project, cliConfig) {
 
   // Initialize modules
   const config = await loadConfig(cliConfig);
-  const sessionId = generateSessionId();
+  const sessionId = generateSessionId('talk');
   const { logsDir } = getOrchestratorPaths(cliConfig);
   const logger = new Logger(`talk-${sessionId}`, logsDir);
   await logger.init();
@@ -29,63 +98,33 @@ async function talkCommand(project, cliConfig) {
   const openspec = new OpenSpecReader(cliConfig.projectDir);
   const roadmapReader = new RoadmapReader(cliConfig.projectDir);
 
-  // Gather context for Riley
+  // Gather project context for Riley
   let techStack = 'Not specified';
   try { techStack = await openspec.parseTechStack(); } catch {}
 
-  let progressContext = '';
-
-  // Read orchestrator state
   const stateDir = path.join(cliConfig.activeAgentsDir, 'orchestrator');
-  const stateFilePath = path.join(stateDir, 'state.json');
-  try {
-    const raw = await fs.readFile(stateFilePath, 'utf-8');
-    const state = JSON.parse(raw);
-    progressContext += `\n## Current Session State\n`;
-    progressContext += `- Session: ${state.sessionId}\n`;
-    progressContext += `- State: ${state.state}\n`;
-    progressContext += `- Completed: ${state.requirements.completed.length} requirements\n`;
-    progressContext += `- Pending: ${state.requirements.pending.length} requirements\n`;
-    progressContext += `- Parked: ${state.requirements.parked.length} requirements\n`;
-    if (state.requirements.completed.length > 0) {
-      progressContext += `- Completed items: ${state.requirements.completed.join(', ')}\n`;
-    }
-    if (state.requirements.parked.length > 0) {
-      const parkedIds = state.requirements.parked.map(p => typeof p === 'string' ? p : p.id);
-      progressContext += `- Parked items: ${parkedIds.join(', ')}\n`;
-    }
-  } catch {
-    progressContext += '\nNo active session found.\n';
-  }
+  const progressContext = await buildTalkContext({ stateDir, logsDir, roadmapReader });
 
-  // Read roadmap status
-  try {
-    const hasRoadmap = await roadmapReader.exists();
-    if (hasRoadmap) {
-      const roadmap = await roadmapReader.parse();
-      progressContext += `\n## Roadmap: ${roadmap.title}\n`;
-      for (const phase of roadmap.phases) {
-        const items = phase.groups.flatMap(g => g.items);
-        const done = items.filter(i => i.status === 'complete').length;
-        const total = items.length;
-        progressContext += `- Phase ${phase.number} (${phase.label}): ${done}/${total} complete\n`;
-      }
-    }
-  } catch {}
+  const talkAgentConfig = config.agents?.['talk'] || config.agents?.['pm'];
 
-  // Render system prompt
-  const talkAgentConfig = config.agents?.pm || {};
+  // Render the talk prompt template
   const templateVars = {
     PROJECT_ID: cliConfig.projectId,
     PROJECT_DIR: cliConfig.projectDir,
     TECH_STACK: techStack,
     GITHUB_REPO: cliConfig.githubRepo || '',
-    REQUIREMENTS: `You are in a mid-project conversation. Here is the current project progress:\n${progressContext}\n\nThe developer wants to discuss the project. Listen carefully, and if they want to update specs or roadmap, make the changes directly.`
+    REQUIREMENTS: progressContext
+      ? `Here is the current project state for context:\n${progressContext}`
+      : ''
   };
 
-  const renderedPrompt = await templateEngine.renderAgentPrompt('pm-agent', templateVars);
+  const promptPath = path.join(cliConfig.templatesDir, 'pm-agent', 'talk-prompt.md');
+  let promptTemplate = await fs.readFile(promptPath, 'utf-8');
+  // Resolve partials ({{>roadmap-rules}}, etc.)
+  promptTemplate = await templateEngine._resolvePartials(promptTemplate);
+  const renderedPrompt = templateEngine.renderString(promptTemplate, templateVars);
 
-  // Determine session: resume or new
+  // Determine Claude session ID for tracking / resume
   let claudeSessionId = null;
   let resumeSessionId = null;
 
@@ -102,13 +141,13 @@ async function talkCommand(project, cliConfig) {
   }
 
   // Display banner
-  console.log('  Riley has context about your project\'s current progress.');
+  console.log('  Riley has context about your project\'s current state.');
   console.log('  Opening Claude Code terminal with project context...');
   console.log('  Use Ctrl+C or /exit to end the session.');
   console.log('=====================');
   console.log('');
 
-  // Main session loop (supports re-entry for format fix)
+  // Main session loop (supports re-entry)
   let reenter = true;
   while (reenter) {
     reenter = false;
@@ -116,7 +155,7 @@ async function talkCommand(project, cliConfig) {
     await spawnClaudeTerminal({
       projectDir: cliConfig.projectDir,
       appendSystemPrompt: renderedPrompt,
-      model: talkAgentConfig.model,
+      model: talkAgentConfig?.model,
       sessionId: claudeSessionId,
       resume: resumeSessionId,
       name: `Riley — ${cliConfig.projectId}`
@@ -132,61 +171,60 @@ async function talkCommand(project, cliConfig) {
     // Save session for future resume
     await saveCliSession(stateDir, activeSessionId, 'talk');
 
-    // Post-session: validate format and handle changes
+    // Post-session: check for changes
     try {
       const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: cliConfig.projectDir });
       const hasChanges = status.trim().length > 0;
 
       if (hasChanges) {
-        // Run format validators
-        let formatPassed = true;
-        const formatIssues = [];
-
-        try {
-          const { validateRoadmapFormat } = require('../roadmap/roadmap-format-checker');
-          const fmtResult = await validateRoadmapFormat(cliConfig.projectDir);
-          if (!fmtResult.valid) {
-            formatPassed = false;
-            const issues = [...fmtResult.nearMisses, ...fmtResult.errors,
-              ...(fmtResult.missingGroups || []),
-              ...(fmtResult.timelineEstimates || []).map(e => `Line ${e.line}: "${e.match}"`)];
-            formatIssues.push(`Roadmap: ${issues.join('; ')}`);
-          }
-        } catch { /* no roadmap */ }
-
+        // Run format checks (requirements + roadmap)
         try {
           const { validateRequirementsFormat } = require('../roadmap/requirements-format-checker');
-          const reqResult = await validateRequirementsFormat(cliConfig.projectDir);
-          if (!reqResult.valid) {
-            formatPassed = false;
-            formatIssues.push(`Requirements: ${reqResult.errors.join('; ')}`);
+          const { validateRoadmapFormat } = require('../roadmap/roadmap-format-checker');
+
+          const [reqResult, roadmapResult] = await Promise.all([
+            validateRequirementsFormat(cliConfig.projectDir).catch(() => null),
+            validateRoadmapFormat(cliConfig.projectDir).catch(() => null)
+          ]);
+
+          const issues = [];
+          if (reqResult && !reqResult.valid) {
+            issues.push(...reqResult.errors.map(e => `  requirements: ${e}`));
           }
-        } catch { /* no project.md */ }
-
-        if (!formatPassed) {
-          console.log('');
-          console.log('  Format validation FAILED:');
-          for (const issue of formatIssues) {
-            console.log(`    ${issue}`);
+          if (roadmapResult && !roadmapResult.valid) {
+            const roadmapIssues = [...(roadmapResult.nearMisses || []), ...(roadmapResult.errors || [])];
+            issues.push(...roadmapIssues.map(e => `  roadmap: ${e}`));
           }
 
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          const choice = await new Promise(resolve =>
-            rl.question('\n  [r]e-enter Claude to fix / [p]ush anyway / [q]uit? ', resolve)
-          );
-          rl.close();
-
-          const c = choice.trim().toLowerCase();
-          if (c === 'r') {
-            reenter = true;
-            continue;
-          } else if (c !== 'p') {
+          if (issues.length > 0) {
             console.log('');
-            console.log('  Session complete. Changes left uncommitted.');
-            await logger.log('info', 'talk_session_ended', { sessionId });
-            return 0;
+            console.log('  Format checks FAILED:');
+            for (const issue of issues) {
+              console.log(`    ${issue}`);
+            }
+
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+            const choice = await new Promise(resolve =>
+              rl.question('\n  [r]e-enter Riley to fix / [p]ush anyway / [q]uit? ', resolve)
+            );
+            rl.close();
+
+            const c = choice.trim().toLowerCase();
+            if (c === 'r') {
+              reenter = true;
+              continue;
+            } else if (c !== 'p') {
+              // quit
+              console.log('');
+              console.log('  Session complete. Changes left uncommitted.');
+              await logger.log('info', 'talk_session_ended', { sessionId });
+              return 0;
+            }
+            // 'p': fall through to push prompt
+          } else {
+            console.log('  Format checks passed.');
           }
-        }
+        } catch { /* format checker not available — treat as passed */ }
 
         // Offer to push
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -248,4 +286,4 @@ async function commitAndPush(projectDir, projectId) {
   }
 }
 
-module.exports = { talkCommand };
+module.exports = { talkCommand, buildTalkContext };

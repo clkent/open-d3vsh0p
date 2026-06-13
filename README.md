@@ -1,10 +1,25 @@
 # d3vsh0p
 
-An agent orchestration platform that uses the Claude Agent SDK to run AI agents that build software projects autonomously. Projects are spec-driven using OpenSpec, live in isolated repositories outside of d3vsh0p, and are managed through structured development cycles.
+**Open source AI code orchestration — turns product specs into tested, reviewed, and merged production code using Claude agents in parallel git worktrees.**
 
-**Website:** [d3vsh0p.com](https://d3vsh0p.com)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE) [![Built with Claude Agent SDK](https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-orange.svg)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/sdk) [![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
 
-**Important:** Orchestrator agents run with `bypassPermissions` enabled — they have full tool access within project directories. All agent work is reviewed by the principal engineer agent (Morgan) before merge. See [SECURITY.md](SECURITY.md) for the full trust model.
+You define a product roadmap. d3vsh0p handles the rest — planning, implementation, testing, code review, and merging — all running concurrently in isolated git worktrees. It's not a code generator or a chat assistant. It's a deterministic Node.js state machine that produces real commits, real PRs, and real production code.
+
+**Website:** [d3vsh0p.com](https://d3vsh0p.com) · **Built by:** [Chelsea Kent](https://github.com/clkent) · **License:** [BSL 1.1](LICENSE)
+
+### Quick Start
+
+```bash
+gh repo fork clkent/open-d3vsh0p --clone
+cd open-d3vsh0p/platform/orchestrator && npm install
+./devshop kickoff my-app    # Chat with Riley (PM agent), describe your idea, type "go"
+./devshop run my-app        # Agents build it — in parallel, with tests and code review
+```
+
+---
+
+> **Note:** Orchestrator agents run with `bypassPermissions` enabled — they have full tool access within project directories. All agent work is reviewed by the principal engineer agent (Morgan) before merge. See [SECURITY.md](SECURITY.md) for the full trust model.
 
 ## Architecture
 
