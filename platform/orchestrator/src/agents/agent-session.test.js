@@ -46,7 +46,7 @@ describe('AgentSession', () => {
     baseConfig = {
       templatesDir: '/templates',
       projectDir: '/my/project',
-      pmModel: 'claude-sonnet-4-6-20250627',
+      pmModel: 'claude-sonnet-4-6',
       pmBudgetUsd: 2.00,
       pmTimeoutMs: 300000
     };
@@ -95,7 +95,7 @@ describe('AgentSession', () => {
       const session = new AgentSession(mockRunner, mockTemplate, {
         templatesDir: '/templates',
         projectDir: '/my/project',
-        pmModel: 'claude-sonnet-4-6-20250627'
+        pmModel: 'claude-sonnet-4-6'
         // no pmBudgetUsd or pmTimeoutMs
       });
 

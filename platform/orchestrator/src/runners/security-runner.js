@@ -47,7 +47,7 @@ class SecurityRunner {
       systemPrompt,
       userPrompt,
       workingDir: this.projectDir,
-      model: agentConfig.model || 'claude-sonnet-4-6-20250627',
+      model: agentConfig.model || 'claude-sonnet-4-6',
       maxBudgetUsd: this.maxBudgetUsd,
       timeoutMs: this.timeoutMs,
       allowedTools: agentConfig.allowedTools || ['Read', 'Glob', 'Grep']

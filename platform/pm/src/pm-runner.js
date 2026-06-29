@@ -38,7 +38,7 @@ class PmRunner {
     // Create write sandbox hooks
     const sandboxHooks = createWriteSandbox(projectDir);
 
-    const pmModel = config.agents?.pm?.model || 'claude-sonnet-4-6-20250627';
+    const pmModel = config.agents?.pm?.model || 'claude-sonnet-4-6';
 
     return new PmSession(agentRunner, templateEngine, {
       templatesDir: TEMPLATES_DIR,

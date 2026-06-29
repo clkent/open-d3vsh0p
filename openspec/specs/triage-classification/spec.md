@@ -183,4 +183,4 @@ The triage agent SHALL be configured as a lightweight, read-only agent with low 
 
 #### Scenario: Triage agent defaults
 - **WHEN** the triage agent is invoked
-- **THEN** it SHALL use model `claude-sonnet-4-6-20250627`, max budget $0.25, timeout 30s, and no tools
+- **THEN** it SHALL use model `claude-sonnet-4-6`, max budget $0.25, timeout 30s, and no tools

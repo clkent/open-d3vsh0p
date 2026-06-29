@@ -140,7 +140,7 @@ Each agent config.json SHALL contain at minimum: `role` (the agent's functional 
 
 #### Scenario: Implementation agent config
 - **WHEN** the implementation-agent config.json is read
-- **THEN** it SHALL contain `role: "implementation"`, `name: "Developer"`, `model: "claude-sonnet-4-6-20250627"`, `temperature: 0.7`, `autoStart: false`, and permissions including `canRunCommands: ["npm", "node", "git", "openspec"]`
+- **THEN** it SHALL contain `role: "implementation"`, `name: "Developer"`, `model: "claude-sonnet-4-6"`, `temperature: 0.7`, `autoStart: false`, and permissions including `canRunCommands: ["npm", "node", "git", "openspec"]`
 
 #### Scenario: PM agent config
 - **WHEN** the pm-agent config.json is read

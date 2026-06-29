@@ -55,7 +55,7 @@ async function planCommand(project, cliConfig) {
 
   const agentSession = new AgentSession(agentRunner, templateEngine, {
     ...cliConfig,
-    pmModel: config.agents?.pm?.model || 'claude-sonnet-4-6-20250627',
+    pmModel: config.agents?.pm?.model || 'claude-sonnet-4-6',
     pmBudgetUsd: config.agents?.pm?.maxBudgetUsd || 2.00,
     pmTimeoutMs: config.agents?.pm?.timeoutMs || 300000,
     contextRefresh: {

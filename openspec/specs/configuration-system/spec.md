@@ -28,7 +28,7 @@ The system SHALL ship a `defaults.json` file containing baseline values for all 
 - **THEN** `git.sessionBranchPrefix` SHALL be `"devshop/session"` and `git.commitPrefix` SHALL be `"feat"`
 
 ### Per-Agent Configuration
-The system SHALL define four agent roles in `defaults.json`, each with `model`, `maxBudgetUsd`, `timeoutMs`, and `allowedTools`. The roles SHALL be: `implementation` (model: claude-sonnet-4-6-20250627, budget: $5.00, timeout: 600s, tools: Bash/Edit/Read/Write/Glob/Grep), `principal-engineer` (budget: $2.00, timeout: 120s, tools: Read/Glob/Grep/Bash), `security` (budget: $1.00, timeout: 120s, tools: Read/Glob/Grep), and `pm` (budget: $2.00, timeout: 300s, tools: Bash/Read/Write/Glob/Grep/Edit).
+The system SHALL define four agent roles in `defaults.json`, each with `model`, `maxBudgetUsd`, `timeoutMs`, and `allowedTools`. The roles SHALL be: `implementation` (model: claude-sonnet-4-6, budget: $5.00, timeout: 600s, tools: Bash/Edit/Read/Write/Glob/Grep), `principal-engineer` (budget: $2.00, timeout: 120s, tools: Read/Glob/Grep/Bash), `security` (budget: $1.00, timeout: 120s, tools: Read/Glob/Grep), and `pm` (budget: $2.00, timeout: 300s, tools: Bash/Read/Write/Glob/Grep/Edit).
 
 #### Scenario: Implementation agent defaults
 - **WHEN** loadDefaults() is called
