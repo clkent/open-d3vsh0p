@@ -89,7 +89,7 @@ class AgentSession {
       systemPrompt,
       userPrompt: userMessage,
       workingDir: this.config.projectDir,
-      model: this.config.pmModel || 'claude-sonnet-4-20250514',
+      model: this.config.pmModel || 'claude-sonnet-4-6-20250627',
       maxBudgetUsd: this.config.pmBudgetUsd,
       timeoutMs: this.config.pmTimeoutMs,
       allowedTools: this.config.allowedTools || ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit'],
@@ -147,7 +147,7 @@ class AgentSession {
     return new AgentSession(orchestrator.agentRunner, orchestrator.templateEngine, {
       templatesDir: orchestrator.cliOptions.templatesDir,
       projectDir: orchestrator.cliOptions.projectDir,
-      pmModel: pairConfig.model || 'claude-sonnet-4-20250514',
+      pmModel: pairConfig.model || 'claude-sonnet-4-6-20250627',
       pmBudgetUsd: pairConfig.maxBudgetUsd || 5.00,
       pmTimeoutMs: pairConfig.timeoutMs || 600000,
       allowedTools: pairConfig.allowedTools || ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit']
@@ -162,7 +162,7 @@ class AgentSession {
     return new AgentSession(agentRunner, templateEngine, {
       templatesDir: cliOptions.templatesDir,
       projectDir: cliOptions.projectDir,
-      pmModel: pairConfig.model || 'claude-sonnet-4-20250514',
+      pmModel: pairConfig.model || 'claude-sonnet-4-6-20250627',
       pmBudgetUsd: pairConfig.maxBudgetUsd || 5.00,
       pmTimeoutMs: pairConfig.timeoutMs || 600000,
       allowedTools: pairConfig.allowedTools || ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit']
@@ -175,7 +175,7 @@ class AgentSession {
    */
   static resolveAgentConfig(config, agentKey, defaults = {}) {
     return {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6-20250627',
       maxBudgetUsd: 5.00,
       timeoutMs: 600000,
       allowedTools: ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit'],

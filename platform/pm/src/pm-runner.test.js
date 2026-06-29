@@ -142,7 +142,7 @@ describe('PmSession.chat', () => {
     const session = new PmSession(runner, engine, {
       templatesDir: tmpDir,
       projectDir: '/tmp/project',
-      pmModel: 'claude-sonnet-4-20250514',
+      pmModel: 'claude-sonnet-4-6-20250627',
       devshopContext: '### Parser\n```\ncode\n```',
       sandboxHooks: { preToolUse: [] },
       allowedTools: ['Read', 'Glob', 'Grep']
@@ -162,7 +162,7 @@ describe('PmSession.chat', () => {
     const session = new PmSession(runner, engine, {
       templatesDir: tmpDir,
       projectDir: '/tmp/project',
-      pmModel: 'claude-sonnet-4-20250514',
+      pmModel: 'claude-sonnet-4-6-20250627',
       devshopContext: '',
       sandboxHooks,
       allowedTools: ['Read']
@@ -186,7 +186,7 @@ describe('PmSession.chat', () => {
     const session = new PmSession(runner, engine, {
       templatesDir: tmpDir,
       projectDir: '/tmp/project',
-      pmModel: 'claude-sonnet-4-20250514',
+      pmModel: 'claude-sonnet-4-6-20250627',
       devshopContext: 'PARSER CODE HERE',
       sandboxHooks: { preToolUse: [] },
       allowedTools: ['Read']
@@ -208,7 +208,7 @@ describe('PmSession.chat', () => {
     const session = new PmSession(runner, engine, {
       templatesDir: tmpDir,
       projectDir: '/tmp/project',
-      pmModel: 'claude-sonnet-4-20250514',
+      pmModel: 'claude-sonnet-4-6-20250627',
       devshopContext: '',
       sandboxHooks: { preToolUse: [] },
       allowedTools: ['Read']
@@ -230,7 +230,7 @@ describe('PmSession.chat', () => {
     const session = new PmSession(runner, engine, {
       templatesDir: tmpDir,
       projectDir: '/tmp/project',
-      pmModel: 'claude-sonnet-4-20250514',
+      pmModel: 'claude-sonnet-4-6-20250627',
       devshopContext: '',
       sandboxHooks: { preToolUse: [] },
       allowedTools: ['Read', 'Glob', 'Grep']

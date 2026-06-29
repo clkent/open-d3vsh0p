@@ -11,19 +11,19 @@
   },
   "agents": {
     "implementation": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 5.00,
       "timeoutMs": 600000,
       "allowedTools": ["Bash", "Edit", "Read", "Write", "Glob", "Grep"]
     },
     "principal-engineer": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 2.00,
       "timeoutMs": 120000,
       "allowedTools": ["Read", "Glob", "Grep", "Bash"]
     },
     "security": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 1.00,
       "timeoutMs": 120000,
       "allowedTools": ["Read", "Glob", "Grep"]
@@ -35,25 +35,25 @@
       "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep", "Edit"]
     },
     "pm": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 2.00,
       "timeoutMs": 300000,
       "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep", "Edit"]
     },
     "spike": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 3.00,
       "timeoutMs": 300000,
       "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep"]
     },
     "diagnostic": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 3.00,
       "timeoutMs": 300000,
       "allowedTools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
     },
     "triage": {
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-sonnet-4-6-20250627",
       "maxBudgetUsd": 0.25,
       "timeoutMs": 30000,
       "allowedTools": []
