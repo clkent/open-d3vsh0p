@@ -6,11 +6,13 @@ const path = require('path');
  * Build CLI args array for the claude command.
  * Pure function — easy to test without spawning a process.
  */
-function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, name }) {
+function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt }) {
   const args = ['--dangerously-skip-permissions'];
 
   if (resume) {
     args.push('--resume', resume);
+  } else if (continueSession) {
+    args.push('--continue');
   } else {
     if (appendSystemPrompt) {
       args.push('--append-system-prompt', appendSystemPrompt);
@@ -28,6 +30,11 @@ function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, name })
     args.push('--name', name);
   }
 
+  // Positional prompt must come last
+  if (initialPrompt) {
+    args.push(initialPrompt);
+  }
+
   return args;
 }
 
@@ -35,8 +42,8 @@ function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, name })
  * Spawn a real Claude Code terminal session with stdio: 'inherit'.
  * Returns a promise that resolves with the exit code when the user exits.
  */
-function spawnClaudeTerminal({ projectDir, appendSystemPrompt, model, sessionId, resume, name }) {
-  const args = buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, name });
+function spawnClaudeTerminal({ projectDir, appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt }) {
+  const args = buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt });
 
   const proc = spawn('claude', args, {
     stdio: 'inherit',

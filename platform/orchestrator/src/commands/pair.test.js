@@ -231,6 +231,41 @@ describe('buildClaudeArgs', () => {
     assert.ok(promptIdx < modelIdx);
     assert.ok(modelIdx < nameIdx);
   });
+
+  it('uses --continue when continueSession is true', () => {
+    const args = buildClaudeArgs({
+      continueSession: true,
+      model: 'claude-sonnet-4-20250514',
+      name: 'Morgan'
+    });
+
+    assert.ok(args.includes('--continue'));
+    assert.ok(!args.includes('--resume'));
+    assert.ok(!args.includes('--append-system-prompt'));
+    assert.ok(!args.includes('--session-id'));
+  });
+
+  it('places initialPrompt as last positional arg', () => {
+    const args = buildClaudeArgs({
+      appendSystemPrompt: 'prompt',
+      sessionId: 'sid',
+      name: 'Morgan',
+      initialPrompt: 'Hello Riley'
+    });
+
+    assert.equal(args[args.length - 1], 'Hello Riley');
+    assert.ok(!args.includes('--initial-prompt'));
+  });
+
+  it('omits initialPrompt when not specified', () => {
+    const args = buildClaudeArgs({
+      appendSystemPrompt: 'prompt',
+      sessionId: 'sid'
+    });
+
+    // Last arg should be a flag value, not a standalone prompt
+    assert.ok(args[args.length - 1] === 'sid');
+  });
 });
 
 describe('spawnClaudeTerminal', () => {
