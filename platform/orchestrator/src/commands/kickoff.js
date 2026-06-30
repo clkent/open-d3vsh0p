@@ -127,45 +127,45 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
     // Save session for reference
     await saveCliSession(stateDir, claudeSessionId, 'kickoff');
 
+    // Commit Riley's changes before running validation
+    try {
+      const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: projectDir });
+      if (status.trim()) {
+        await execFileAsync('git', ['add', '-A'], { cwd: projectDir });
+        await execFileAsync('git', ['commit', '-m', 'wip: kickoff session progress'], { cwd: projectDir });
+        console.log('  Changes committed.');
+      }
+    } catch { /* commit failed — validation will still run on working tree */ }
+
     // Step 4: Post-session validation
     const validationResult = await validateKickoffOutput(projectDir);
 
     if (validationResult.passed) {
       console.log('  Validation passed.');
     } else {
-      // Check if core files exist — only offer re-enter if they're missing entirely
-      const hasCoreFiles = !validationResult.issues.some(i =>
-        i.startsWith('Missing: openspec/project.md') ||
-        i.startsWith('Missing: openspec/roadmap.md') ||
-        i.startsWith('Missing: openspec/specs/')
-      );
-
-      if (hasCoreFiles) {
-        // Format issues only — warn but proceed
-        console.log('');
-        console.log('  Validation warnings (non-blocking):');
-        for (const issue of validationResult.issues) {
-          console.log(`    ${issue}`);
-        }
-      } else {
-        // Missing core files — offer re-enter
-        console.log('');
-        console.log('  Validation found missing files:');
-        for (const issue of validationResult.issues) {
-          console.log(`    ${issue}`);
-        }
-
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        const choice = await new Promise(resolve =>
-          rl.question('\n  [r]e-enter Claude to fix / [s]kip and continue? ', resolve)
-        );
-        rl.close();
-
-        if (choice.trim().toLowerCase() === 'r') {
-          reenter = true;
-          continue;
-        }
+      console.log('');
+      console.log('  Post-session validation:');
+      for (const issue of validationResult.issues) {
+        console.log(`    ${issue}`);
       }
+
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const choice = await new Promise(resolve =>
+        rl.question('\n  [r]e-enter Claude to fix / [s]kip validation / [q]uit? ', resolve)
+      );
+      rl.close();
+
+      const c = choice.trim().toLowerCase();
+      if (c === 'r') {
+        reenter = true;
+        continue;
+      } else if (c === 'q') {
+        console.log('');
+        console.log(`  Exiting. Project "${projectId}" is scaffolded but may have incomplete specs.`);
+        await logger.log('info', 'kickoff_session_ended', { sessionId });
+        return 0;
+      }
+      // 's': fall through to bootstrap
     }
   }
 
