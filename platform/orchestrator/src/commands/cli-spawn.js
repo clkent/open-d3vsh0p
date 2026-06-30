@@ -40,7 +40,8 @@ function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continu
 
 /**
  * Spawn a real Claude Code terminal session with stdio: 'inherit'.
- * Returns a promise that resolves with the exit code when the user exits.
+ * Returns { promise, proc } where promise resolves with the exit code
+ * and proc is the child process (for timeout killing).
  */
 function spawnClaudeTerminal({ projectDir, appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt }) {
   const args = buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt });
@@ -51,10 +52,12 @@ function spawnClaudeTerminal({ projectDir, appendSystemPrompt, model, sessionId,
     env: { ...process.env }
   });
 
-  return new Promise((resolve, reject) => {
+  const promise = new Promise((resolve, reject) => {
     proc.on('exit', (code) => resolve(code ?? 0));
     proc.on('error', reject);
   });
+
+  return { promise, proc };
 }
 
 /**

@@ -1,13 +1,18 @@
 const path = require('path');
 const fs = require('fs/promises');
+const { randomUUID } = require('crypto');
 const { RoadmapReader } = require('../roadmap/roadmap-reader');
-const { ParallelOrchestrator } = require('../parallel-orchestrator');
 const { GitOps } = require('../git/git-ops');
+const { TemplateEngine } = require('../agents/template-engine');
 const { resolveScheduleConfig, getWindowConfig, computeWindowEndTimeMs, VALID_WINDOWS } = require('../scheduler/window-config');
 const { CostEstimator } = require('../session/cost-estimator');
 const { generateSessionId } = require('../session/session-utils');
 const { getOrchestratorPaths } = require('../session/path-utils');
+const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
+const { loadConfig } = require('../infra/config');
 
+const DEVSHOP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const TEMPLATES_DIR = path.join(DEVSHOP_ROOT, 'templates', 'agents');
 const LOCK_FILE_NAME = 'run.lock';
 
 async function runCommand(project, config, registry, saveRegistry) {
@@ -51,7 +56,6 @@ async function runCommand(project, config, registry, saveRegistry) {
       config.timeLimitMs = winConfig.timeLimitHours * 3600000;
     }
 
-    // Set window end time for consumption monitoring
     config.windowEndTimeMs = computeWindowEndTimeMs(winConfig.endHour);
   }
 
@@ -80,16 +84,24 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     return 1;
   }
 
-  const mode = 'parallel';
+  const fullConfig = await loadConfig(config);
+  const morganConfig = fullConfig.agents?.['principal-engineer'] || fullConfig.agents?.['pair'] || {};
+
+  // Snapshot roadmap state before the session (for post-session diff)
+  const preRoadmap = await roadmapReader.parse();
+  const preCompleteCount = roadmapReader.getAllItems(preRoadmap)
+    .filter(i => i.status === 'complete').length;
 
   // Print session header
+  const budgetUsd = config.budgetLimitUsd;
+  const timeLimitHours = (config.timeLimitMs / 3600000).toFixed(1);
+
   console.log('');
-  console.log('=== DevShop Orchestrator ===');
+  console.log('=== DevShop — Morgan Orchestrator ===');
   console.log(`  Project:    ${project.name} (${project.id})`);
   console.log(`  Directory:  ${project.projectDir}`);
-  console.log(`  Mode:       ${mode}`);
-  console.log(`  Budget:     $${config.budgetLimitUsd.toFixed(2)}`);
-  console.log(`  Time limit: ${(config.timeLimitMs / 3600000).toFixed(1)}h`);
+  console.log(`  Budget:     $${budgetUsd.toFixed(2)}`);
+  console.log(`  Time limit: ${timeLimitHours}h`);
   if (windowName) {
     console.log(`  Window:     ${windowName}`);
     if (config.windowEndTimeMs) {
@@ -111,16 +123,12 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     await costEstimator.init();
 
     if (costEstimator.sessionCount >= 1) {
-      const roadmapReader = new RoadmapReader(config.projectDir);
       const roadmap = await roadmapReader.parse();
       const pendingCount = roadmapReader.getAllItems(roadmap)
         .filter(i => i.status === 'pending').length;
 
       if (pendingCount > 0) {
-        const prediction = costEstimator.predictSufficiency(
-          config.budgetLimitUsd,
-          pendingCount
-        );
+        const prediction = costEstimator.predictSufficiency(budgetUsd, pendingCount);
         console.log(`  Estimate:   $${prediction.estimatedCost.toFixed(2)} (${pendingCount} pending, confidence: ${prediction.confidence})`);
       }
     }
@@ -128,125 +136,200 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     // Non-fatal — skip estimate display
   }
 
-  console.log('============================');
+  console.log('=====================================');
   console.log('');
 
-  let orchestrator = new ParallelOrchestrator(config);
+  // Build Morgan's orchestration prompt
+  const templateEngine = new TemplateEngine(TEMPLATES_DIR);
 
-  let result = await orchestrator.run();
+  let roadmapContent = '';
+  try {
+    roadmapContent = await fs.readFile(path.join(config.projectDir, 'openspec', 'roadmap.md'), 'utf-8');
+  } catch { /* no roadmap content */ }
 
-  // Handle auto-restart after successful blocking fix
-  while (result && result.restart) {
-    console.log('');
-    console.log('  === Auto-restarting after blocking fix ===');
-    console.log('');
-    config.fresh = true;
-    const freshOrchestrator = new ParallelOrchestrator(config);
-    result = await freshOrchestrator.run();
-  }
+  let conventions = '';
+  try {
+    conventions = await fs.readFile(path.join(config.projectDir, 'openspec', 'conventions.md'), 'utf-8');
+  } catch { /* no conventions */ }
 
-  // Early exit — no session was created
-  if (!result || result.stopReason === 'no_pending_work') {
-    return 0;
-  }
+  let techStack = 'Not specified';
+  try {
+    const { OpenSpecReader } = require('../roadmap/openspec-reader');
+    const openspec = new OpenSpecReader(config.projectDir);
+    techStack = await openspec.parseTechStack();
+  } catch {}
 
-  // Print session summary
-  console.log('');
-  console.log('=== Session Complete ===');
-  console.log(`  Stop reason: ${result.stopReason}`);
-  console.log(`  Completed:   ${result.completed.length} requirements`);
-  console.log(`  Parked:      ${result.parked.length} requirements`);
-  console.log(`  Remaining:   ${result.remaining.length} requirements`);
-  console.log(`  Total cost:  $${result.totalCostUsd.toFixed(2)}`);
-  console.log(`  Branch:      ${result.sessionBranch}`);
-  console.log(`  Log:         ${result.logFile}`);
-  console.log('========================');
-  console.log('');
+  const isAutonomous = !!windowName;
+  const autonomousMode = isAutonomous
+    ? `## Autonomous Mode\n\nYou are running autonomously via the scheduler (window: ${windowName}). Do NOT wait for user input — make decisions independently. Work through items until you run out of budget/time or complete everything. If you encounter a blocker, park the item and move on.`
+    : '';
 
-  // Surface incomplete HUMAN-tagged roadmap items and runtime-discovered interventions
-  if (hasRoadmap) {
-    const roadmap = await roadmapReader.parse();
-    const humanItems = roadmapReader.getAllItems(roadmap)
-      .filter(i => i.isHuman && i.status !== 'complete');
+  const templateVars = {
+    PROJECT_ID: config.projectId,
+    PROJECT_DIR: config.projectDir,
+    GITHUB_REPO: config.githubRepo || '',
+    TECH_STACK: techStack,
+    ROADMAP_CONTENT: roadmapContent,
+    CONVENTIONS: conventions,
+    BUDGET_USD: budgetUsd.toFixed(2),
+    TIME_LIMIT_HOURS: timeLimitHours,
+    AUTONOMOUS_MODE: autonomousMode
+  };
 
-    // Separate pre-planned vs runtime-discovered interventions
-    const parkedEntries = result.parked || [];
-    const runtimeInterventions = parkedEntries.filter(p => p.intervention);
+  const promptPath = path.join(TEMPLATES_DIR, 'principal-engineer', 'run-prompt.md');
+  const promptTemplate = await fs.readFile(promptPath, 'utf-8');
+  const resolvedTemplate = await templateEngine._resolvePartials(promptTemplate);
+  const renderedPrompt = templateEngine.renderString(resolvedTemplate, templateVars);
 
-    if (humanItems.length > 0 || runtimeInterventions.length > 0) {
-      console.log('=== Action Required ===');
+  // Session management
+  const stateDir = path.join(config.activeAgentsDir, 'orchestrator');
+  let claudeSessionId = null;
+  let resumeSessionId = null;
 
-      // Pre-planned [HUMAN] items (excluding runtime-discovered ones to avoid duplication)
-      const runtimeIds = new Set(runtimeInterventions.map(r => r.id));
-      const prePlanned = humanItems.filter(i => !runtimeIds.has(i.id));
-      for (const item of prePlanned) {
-        const cleanDesc = item.description.replace(/\s*\[HUMAN\]\s*/g, '').trim();
-        console.log(`  Phase ${item.phaseNumber}: \`${item.id}\` — ${cleanDesc}`);
-      }
-
-      // Runtime-discovered interventions with structured instructions
-      if (runtimeInterventions.length > 0) {
-        if (prePlanned.length > 0) console.log('');
-        console.log('--- Discovered During This Session ---');
-        for (const entry of runtimeInterventions) {
-          const instr = entry.intervention;
-          console.log(`  \`${entry.id}\` — ${instr.title} [${instr.category}]`);
-          for (let i = 0; i < instr.steps.length; i++) {
-            console.log(`    ${i + 1}. ${instr.steps[i]}`);
-          }
-          if (instr.verifyCommand) {
-            console.log(`    Verify: ${instr.verifyCommand}`);
-          }
-          console.log('');
-        }
-      }
-
-      console.log(`  Run: ./devshop action ${config.projectId}`);
-      console.log('=======================');
+  if (config.resume) {
+    resumeSessionId = await loadCliSession(stateDir, 'run');
+    if (resumeSessionId) {
+      console.log('  Resuming previous run session...');
       console.log('');
     }
   }
 
-  // Update registry with last session
-  project.lastSessionId = path.basename(result.logFile, '-summary.json');
+  if (!resumeSessionId) {
+    claudeSessionId = randomUUID();
+  }
+
+  // Build initial prompt
+  const initialPrompt = isAutonomous
+    ? 'Read the roadmap and start working through the pending items autonomously. Do not wait for input.'
+    : 'Read the roadmap and start working through the pending items. I can interact with you as you work.';
+
+  console.log('  Spawning Morgan as orchestrator...');
+  console.log('  Use Ctrl+C or /exit to end the session.');
+  console.log('');
+
+  // Spawn Morgan with optional time limit
+  const { promise: morganPromise, proc: morganProc } = spawnClaudeTerminal({
+    projectDir: config.projectDir,
+    appendSystemPrompt: resumeSessionId ? undefined : renderedPrompt,
+    model: morganConfig.model,
+    sessionId: claudeSessionId,
+    resume: resumeSessionId,
+    name: `Morgan — ${config.projectId}`,
+    initialPrompt: resumeSessionId ? undefined : initialPrompt
+  });
+
+  // Time limit enforcement
+  let timedOut = false;
+  const timer = config.timeLimitMs ? setTimeout(() => {
+    timedOut = true;
+    console.log('');
+    console.log('  === Time limit reached — stopping Morgan ===');
+    console.log('');
+    morganProc.kill('SIGTERM');
+  }, config.timeLimitMs) : null;
+
+  await morganPromise;
+
+  if (timer) clearTimeout(timer);
+
+  // Save session for resume
+  await saveCliSession(stateDir, claudeSessionId || resumeSessionId, 'run');
+
+  // Post-session: detect completed work
+  const postRoadmap = await roadmapReader.parse();
+  const postCompleteCount = roadmapReader.getAllItems(postRoadmap)
+    .filter(i => i.status === 'complete').length;
+  const itemsCompleted = postCompleteCount - preCompleteCount;
+
+  const parkedItems = roadmapReader.getAllItems(postRoadmap)
+    .filter(i => i.status === 'parked');
+  const pendingItems = roadmapReader.getAllItems(postRoadmap)
+    .filter(i => i.status === 'pending');
+
+  // Print session summary
+  console.log('');
+  console.log('=== Session Complete ===');
+  console.log(`  Completed:   ${itemsCompleted} items this session (${postCompleteCount} total)`);
+  console.log(`  Parked:      ${parkedItems.length} items`);
+  console.log(`  Remaining:   ${pendingItems.length} items`);
+  if (timedOut) {
+    console.log(`  Stop reason: time_limit`);
+  }
+  console.log('========================');
+  console.log('');
+
+  // Surface HUMAN-tagged items
+  const humanItems = roadmapReader.getAllItems(postRoadmap)
+    .filter(i => i.isHuman && i.status !== 'complete');
+  if (humanItems.length > 0) {
+    console.log('=== Action Required ===');
+    for (const item of humanItems) {
+      const cleanDesc = item.description.replace(/\s*\[HUMAN\]\s*/g, '').trim();
+      console.log(`  Phase ${item.phaseNumber}: \`${item.id}\` — ${cleanDesc}`);
+    }
+    console.log(`  Run: ./devshop action ${config.projectId}`);
+    console.log('=======================');
+    console.log('');
+  }
+
+  // Update registry
+  const sessionId = generateSessionId();
+  project.lastSessionId = sessionId;
   await saveRegistry(registry);
 
   // Post-run digest if running in a window
   if (windowName) {
-    await postRunDigest(project, config, result, windowName);
+    await postRunDigest(project, config, {
+      completed: itemsCompleted,
+      parked: parkedItems.length,
+      remaining: pendingItems.length,
+      stopReason: timedOut ? 'time_limit' : 'session_ended'
+    }, windowName);
   }
 
   // Auto-consolidate session branch to main
-  if (result.completed.length > 0 && !config.noConsolidate) {
+  if (itemsCompleted > 0 && !config.noConsolidate) {
     try {
-      const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
-      const gitOps = new GitOps(logger);
-      const sessionId = path.basename(result.logFile, '-summary.json');
-      await gitOps.consolidateToMain(config.projectDir, result.sessionBranch, {
-        sessionId,
-        projectId: config.projectId,
-        completed: result.completed,
-        parked: result.parked,
-        totalCostUsd: result.totalCostUsd
-      });
-      console.log('  Session branch consolidated to main.');
+      // Commit any uncommitted changes Morgan left
+      const { execFile: execFileAsync } = require('../infra/exec-utils');
+      const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: config.projectDir });
+      if (status.trim()) {
+        await execFileAsync('git', ['add', '-A'], { cwd: config.projectDir });
+        await execFileAsync('git', ['commit', '-m', 'chore: uncommitted changes from Morgan session'], { cwd: config.projectDir });
+      }
 
-      // Post-consolidation roadmap audit
-      try {
-        const auditResult = await auditRoadmapCompletions(config.projectDir);
-        if (auditResult.reconciled > 0) {
-          console.log(`  Roadmap audit: marked ${auditResult.reconciled} items complete (${auditResult.items.join(', ')})`);
+      // Get current branch name for consolidation
+      const { stdout: branchName } = await execFileAsync('git', ['branch', '--show-current'], { cwd: config.projectDir });
+      const currentBranch = branchName.trim();
+
+      if (currentBranch && currentBranch !== 'main') {
+        const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+        const gitOps = new GitOps(logger);
+        await gitOps.consolidateToMain(config.projectDir, currentBranch, {
+          sessionId,
+          projectId: config.projectId,
+          completed: Array(itemsCompleted).fill('item'),
+          parked: parkedItems.map(i => i.id),
+          totalCostUsd: 0
+        });
+        console.log('  Session branch consolidated to main.');
+
+        // Post-consolidation roadmap audit
+        try {
+          const auditResult = await auditRoadmapCompletions(config.projectDir);
+          if (auditResult.reconciled > 0) {
+            console.log(`  Roadmap audit: marked ${auditResult.reconciled} items complete (${auditResult.items.join(', ')})`);
+          }
+        } catch (auditErr) {
+          console.log(`  ~ [audit] Roadmap audit failed: ${auditErr.message}`);
         }
-      } catch (auditErr) {
-        console.log(`  ~ [audit] Roadmap audit failed: ${auditErr.message}`);
       }
     } catch (err) {
       console.log(`  Auto-consolidation failed: ${err.message}`);
-      console.log(`  Branch ${result.sessionBranch} was pushed — merge manually.`);
     }
   }
 
-  return result.parked.length > 0 ? 1 : 0;
+  return parkedItems.length > 0 ? 1 : 0;
 }
 
 async function handleMorningDigest(project, config) {
@@ -290,12 +373,10 @@ async function handleTechDebt(project, config) {
 
   try {
     const { TechDebtRunner } = require('../runners/tech-debt-runner');
-    const { loadConfig } = require('../infra/config');
     const fullConfig = await loadConfig(config);
     const runner = new TechDebtRunner({ ...fullConfig, ...config });
     const result = await runner.run();
 
-    // Post tech debt results to daily digest
     const { GitHubNotifier } = require('../runners/github-notifier');
     const notifier = new GitHubNotifier(project.projectDir, project.name);
 
@@ -312,7 +393,6 @@ async function handleTechDebt(project, config) {
       stopReason: 'tech_debt_complete'
     };
 
-    // Add security findings summary
     if (result.securityResult?.output) {
       digestSummary.securityFindings = result.securityResult.output.substring(0, 2000);
     }
@@ -331,18 +411,16 @@ async function postRunDigest(project, config, result, windowName) {
     const notifier = new GitHubNotifier(project.projectDir, project.name);
 
     const summary = {
-      sessionId: path.basename(result.logFile, '-summary.json'),
+      sessionId: generateSessionId(),
       window: windowName,
-      totalCostUsd: result.totalCostUsd,
-      agentInvocations: result.agentInvocations || 0,
-      sessionBranch: result.sessionBranch,
+      totalCostUsd: 0,
+      agentInvocations: 1,
       results: {
-        completed: result.completed,
-        parked: result.parked,
-        remaining: result.remaining
+        completed: Array(result.completed).fill('item'),
+        parked: Array(result.parked).fill('item'),
+        remaining: Array(result.remaining).fill('item')
       },
-      stopReason: result.stopReason,
-      preview: result.preview || undefined
+      stopReason: result.stopReason
     };
 
     await notifier.postDailyDigest(summary);
@@ -356,20 +434,16 @@ async function acquireRunLock(lockPath) {
   await fs.mkdir(lockDir, { recursive: true });
 
   try {
-    // Check if lock file exists and if process is still running
     const content = await fs.readFile(lockPath, 'utf-8');
     const pid = parseInt(content.trim(), 10);
 
     if (pid && isProcessRunning(pid)) {
       return false;
     }
-
-    // Stale lock, remove it
   } catch {
     // No lock file exists
   }
 
-  // Write our PID
   await fs.writeFile(lockPath, String(process.pid));
   return true;
 }
@@ -393,8 +467,6 @@ function isProcessRunning(pid) {
 
 /**
  * Post-consolidation roadmap audit: detect merged items not marked [x].
- * Scans git log on main for merge commit patterns, compares against roadmap,
- * and marks any unmarked items complete.
  */
 async function auditRoadmapCompletions(projectDir) {
   const reader = new RoadmapReader(projectDir);
@@ -403,7 +475,6 @@ async function auditRoadmapCompletions(projectDir) {
   const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
   const gitOps = new GitOps(logger);
 
-  // Get all merge commits on main
   const { stdout } = await gitOps._git(projectDir, ['log', '--oneline', 'main']);
   const mergePattern = /^[a-f0-9]+ merge: (\S+)/;
   const mergedIds = new Set();
@@ -414,19 +485,16 @@ async function auditRoadmapCompletions(projectDir) {
 
   if (mergedIds.size === 0) return { reconciled: 0, items: [] };
 
-  // Find pending items that have merge commits
   const roadmap = await reader.parse();
   const allItems = reader.getAllItems(roadmap);
   const needsFix = allItems.filter(item => item.status === 'pending' && mergedIds.has(item.id));
 
   if (needsFix.length === 0) return { reconciled: 0, items: [] };
 
-  // Mark each as complete
   for (const item of needsFix) {
     await reader.markItemComplete(item.id);
   }
 
-  // Commit the fix
   const fixedIds = needsFix.map(i => i.id);
   await gitOps.commitAll(projectDir, `fix: mark ${fixedIds.length} items complete in roadmap (post-consolidation audit)`);
 
