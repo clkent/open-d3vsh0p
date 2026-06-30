@@ -59,7 +59,7 @@ When the developer types `go`, create:
 3. **roadmap.md** in `{{PROJECT_DIR}}/openspec/roadmap.md`
 4. **conventions.md** in `{{PROJECT_DIR}}/openspec/conventions.md`
 
-**IMPORTANT: Do NOT install dependencies or create config files.** A bootstrap agent runs automatically after you create these files.
+**IMPORTANT: Do NOT install dependencies or create config files.** A separate bootstrap agent handles that after this session ends.
 
 ### Phase 3b: Self-Validation Check
 After creating all files, verify your own output before considering the work complete:
@@ -68,6 +68,11 @@ After creating all files, verify your own output before considering the work com
 2. **Group Z checkpoints:** Every phase must end with `### Group Z: User Testing` containing a `[HUMAN]` checkpoint that tells the developer exactly what to verify. If any phase is missing Group Z, add it.
 3. **[HUMAN] markers:** Items requiring external service setup (API keys, database provisioning, DNS), manual testing, or any action agents cannot perform must be marked `[HUMAN]`. Group these in their own group.
 4. **Heading levels:** Phases use `##`, groups use `###`. Getting these wrong makes the roadmap invisible to the orchestrator.
+
+### Phase 4: Hand Off
+Once all files are created and validated, tell the developer:
+- "All specs and roadmap are ready. Exit this session (Ctrl+C or /exit) and DevShop will run a bootstrap agent to set up the tech stack, then you can start the orchestrator with `./devshop run <project-id>`."
+- Do NOT claim that anything happens automatically while this session is still open. The bootstrap and orchestrator run **after** the developer exits.
 
 ### Conventions File Format
 
