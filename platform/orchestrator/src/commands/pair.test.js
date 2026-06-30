@@ -152,7 +152,7 @@ describe('buildClaudeArgs', () => {
     const args = buildClaudeArgs({
       appendSystemPrompt: 'test prompt content',
       sessionId: 'abc-123',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       name: 'Morgan — proj-001'
     });
 
@@ -161,7 +161,7 @@ describe('buildClaudeArgs', () => {
     assert.ok(args.includes('--session-id'));
     assert.ok(args.includes('abc-123'));
     assert.ok(args.includes('--model'));
-    assert.ok(args.includes('claude-sonnet-4-20250514'));
+    assert.ok(args.includes('claude-sonnet-4-6'));
     assert.ok(args.includes('--name'));
     assert.ok(args.includes('Morgan — proj-001'));
     assert.ok(!args.includes('--resume'));
@@ -172,7 +172,7 @@ describe('buildClaudeArgs', () => {
       appendSystemPrompt: 'should be ignored',
       sessionId: 'should-be-ignored',
       resume: 'existing-session-id',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       name: 'Morgan — proj-001'
     });
 
@@ -221,7 +221,7 @@ describe('buildClaudeArgs', () => {
     const args = buildClaudeArgs({
       appendSystemPrompt: 'prompt',
       sessionId: 'sid',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       name: 'Morgan'
     });
 
@@ -230,6 +230,41 @@ describe('buildClaudeArgs', () => {
     const nameIdx = args.indexOf('--name');
     assert.ok(promptIdx < modelIdx);
     assert.ok(modelIdx < nameIdx);
+  });
+
+  it('uses --continue when continueSession is true', () => {
+    const args = buildClaudeArgs({
+      continueSession: true,
+      model: 'claude-sonnet-4-6',
+      name: 'Morgan'
+    });
+
+    assert.ok(args.includes('--continue'));
+    assert.ok(!args.includes('--resume'));
+    assert.ok(!args.includes('--append-system-prompt'));
+    assert.ok(!args.includes('--session-id'));
+  });
+
+  it('places initialPrompt as last positional arg', () => {
+    const args = buildClaudeArgs({
+      appendSystemPrompt: 'prompt',
+      sessionId: 'sid',
+      name: 'Morgan',
+      initialPrompt: 'Hello Riley'
+    });
+
+    assert.equal(args[args.length - 1], 'Hello Riley');
+    assert.ok(!args.includes('--initial-prompt'));
+  });
+
+  it('omits initialPrompt when not specified', () => {
+    const args = buildClaudeArgs({
+      appendSystemPrompt: 'prompt',
+      sessionId: 'sid'
+    });
+
+    // Last arg should be a flag value, not a standalone prompt
+    assert.ok(args[args.length - 1] === 'sid');
   });
 });
 

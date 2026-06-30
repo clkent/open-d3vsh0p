@@ -98,26 +98,34 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
   // Step 3: Interactive Riley session via Claude CLI
   const stateDir = path.join(DEVSHOP_ROOT, 'active-agents', '_kickoff');
   let reenter = true;
-  let resumeSessionId = null;
+  let isFirstRun = true;
 
   while (reenter) {
     reenter = false;
 
-    await spawnClaudeTerminal({
-      projectDir,
-      appendSystemPrompt: renderedPrompt,
-      model: kickoffAgentConfig.model,
-      sessionId: resumeSessionId ? undefined : claudeSessionId,
-      resume: resumeSessionId,
-      name: `Riley — ${projectId} kickoff`
-    });
-
-    // After first run, any re-entry is a resume
-    const activeSessionId = resumeSessionId || claudeSessionId;
-    resumeSessionId = activeSessionId;
+    if (isFirstRun) {
+      await spawnClaudeTerminal({
+        projectDir,
+        appendSystemPrompt: renderedPrompt,
+        model: kickoffAgentConfig.model,
+        sessionId: claudeSessionId,
+        name: `Riley — ${projectId} kickoff`,
+        initialPrompt: 'Introduce yourself and ask me what I want to build.'
+      });
+      isFirstRun = false;
+    } else {
+      // Re-enter: continue the most recent session in this project directory
+      await spawnClaudeTerminal({
+        projectDir,
+        continueSession: true,
+        model: kickoffAgentConfig.model,
+        name: `Riley — ${projectId} kickoff`,
+        initialPrompt: 'I re-entered the session because there were validation issues with the specs/roadmap. Please check the openspec/ directory and fix any missing or malformed files.'
+      });
+    }
 
     // Save session for reference
-    await saveCliSession(stateDir, activeSessionId, 'kickoff');
+    await saveCliSession(stateDir, claudeSessionId, 'kickoff');
 
     // Step 4: Post-session validation
     const validationResult = await validateKickoffOutput(projectDir);
@@ -259,7 +267,7 @@ async function bootstrapProject(agentRunner, templateEngine, config, logger) {
   const bootstrapSession = new AgentSession(agentRunner, templateEngine, {
     templatesDir: config.templatesDir,
     projectDir: config.projectDir,
-    pmModel: 'claude-sonnet-4-20250514',
+    pmModel: 'claude-sonnet-4-6',
     pmBudgetUsd: 5,
     pmTimeoutMs: 600000,
     allowedTools: ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit']

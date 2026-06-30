@@ -149,27 +149,34 @@ async function talkCommand(project, cliConfig) {
 
   // Main session loop (supports re-entry)
   let reenter = true;
+  let isFirstRun = true;
   while (reenter) {
     reenter = false;
 
-    await spawnClaudeTerminal({
-      projectDir: cliConfig.projectDir,
-      appendSystemPrompt: renderedPrompt,
-      model: talkAgentConfig?.model,
-      sessionId: claudeSessionId,
-      resume: resumeSessionId,
-      name: `Riley — ${cliConfig.projectId}`
-    });
-
-    // After first run, any re-entry is a resume
-    const activeSessionId = claudeSessionId || resumeSessionId;
-    if (claudeSessionId) {
-      resumeSessionId = claudeSessionId;
-      claudeSessionId = null;
+    if (isFirstRun) {
+      await spawnClaudeTerminal({
+        projectDir: cliConfig.projectDir,
+        appendSystemPrompt: renderedPrompt,
+        model: talkAgentConfig?.model,
+        sessionId: claudeSessionId,
+        resume: resumeSessionId,
+        name: `Riley — ${cliConfig.projectId}`,
+        initialPrompt: resumeSessionId ? undefined : 'Greet me and ask what I\'d like to discuss about this project.'
+      });
+      isFirstRun = false;
+    } else {
+      // Re-enter: continue the most recent session
+      await spawnClaudeTerminal({
+        projectDir: cliConfig.projectDir,
+        continueSession: true,
+        model: talkAgentConfig?.model,
+        name: `Riley — ${cliConfig.projectId}`,
+        initialPrompt: 'I re-entered the session because there were format validation issues. Please check and fix any roadmap or requirements format problems in the openspec/ directory.'
+      });
     }
 
     // Save session for future resume
-    await saveCliSession(stateDir, activeSessionId, 'talk');
+    await saveCliSession(stateDir, claudeSessionId || resumeSessionId, 'talk');
 
     // Post-session: check for changes
     try {

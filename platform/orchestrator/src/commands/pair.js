@@ -150,27 +150,33 @@ async function pairCommand(project, cliConfig) {
 
   // Main session loop (supports re-entry for health check fixes)
   let reenter = true;
+  let isFirstRun = true;
   while (reenter) {
     reenter = false;
 
-    await spawnClaudeTerminal({
-      projectDir: cliConfig.projectDir,
-      appendSystemPrompt: renderedPrompt,
-      model: pairAgentConfig?.model,
-      sessionId: claudeSessionId,
-      resume: resumeSessionId,
-      name: `Morgan — ${cliConfig.projectId}`
-    });
-
-    // After first run, any re-entry is a resume
-    const activeSessionId = claudeSessionId || resumeSessionId;
-    if (claudeSessionId) {
-      resumeSessionId = claudeSessionId;
-      claudeSessionId = null;
+    if (isFirstRun) {
+      await spawnClaudeTerminal({
+        projectDir: cliConfig.projectDir,
+        appendSystemPrompt: renderedPrompt,
+        model: pairAgentConfig?.model,
+        sessionId: claudeSessionId,
+        resume: resumeSessionId,
+        name: `Morgan — ${cliConfig.projectId}`
+      });
+      isFirstRun = false;
+    } else {
+      // Re-enter: continue the most recent session
+      await spawnClaudeTerminal({
+        projectDir: cliConfig.projectDir,
+        continueSession: true,
+        model: pairAgentConfig?.model,
+        name: `Morgan — ${cliConfig.projectId}`,
+        initialPrompt: 'I re-entered the session because health checks failed. Please investigate and fix the failing checks.'
+      });
     }
 
     // Save session for future resume
-    await saveCliSession(stateDir, activeSessionId, 'pair');
+    await saveCliSession(stateDir, claudeSessionId || resumeSessionId, 'pair');
 
     // Post-session: check for changes and health
     try {

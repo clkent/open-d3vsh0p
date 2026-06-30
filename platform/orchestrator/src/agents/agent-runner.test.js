@@ -73,13 +73,13 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(queryCalls.length, 1);
       const { prompt, options } = queryCalls[0];
       assert.equal(prompt, 'hello');
-      assert.equal(options.model, 'claude-sonnet-4-20250514');
+      assert.equal(options.model, 'claude-sonnet-4-6');
       assert.equal(options.cwd, '/tmp');
       assert.equal(options.permissionMode, 'bypassPermissions');
       assert.equal(options.allowDangerouslySkipPermissions, true);
@@ -95,7 +95,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'You are a helpful assistant',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       const { options } = queryCalls[0];
@@ -112,7 +112,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'You are a helpful assistant',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         resumeSessionId: 'existing-session'
       });
 
@@ -131,7 +131,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         resumeSessionId: 'sess-abc'
       });
 
@@ -149,7 +149,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       const { options } = queryCalls[0];
@@ -166,7 +166,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         maxBudgetUsd: 5.00
       });
 
@@ -184,7 +184,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       const { options } = queryCalls[0];
@@ -203,7 +203,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         allowedTools: ['Bash', 'Read']
       });
 
@@ -222,7 +222,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         allowedTools: []
       });
 
@@ -241,7 +241,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         allowedTools: undefined
       });
 
@@ -264,7 +264,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, true);
@@ -285,7 +285,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, false);
@@ -302,7 +302,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, false);
@@ -322,7 +322,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'fix the bug',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, true);
@@ -340,7 +340,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'fix the bug',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.output, 'Done! I fixed the bug.');
@@ -356,7 +356,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, false);
@@ -379,7 +379,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         onEvent: (evt) => events.push(evt)
       });
 
@@ -399,7 +399,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, true);
@@ -415,7 +415,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       assert.equal(result.success, false);
@@ -448,7 +448,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         timeoutMs: 100
       });
 
@@ -469,7 +469,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'sys\0tem',
         userPrompt: 'hel\0lo',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       const { prompt, options } = queryCalls[0];
@@ -490,7 +490,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         hooks: myHooks
       });
 
@@ -508,7 +508,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-6'
       });
 
       const { options } = queryCalls[0];
@@ -527,7 +527,7 @@ describe('AgentRunner', () => {
         systemPrompt: 'test',
         userPrompt: 'hello',
         workingDir: '/tmp',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         timeoutMs: 30000
       });
 

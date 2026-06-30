@@ -36,6 +36,8 @@ The code below is from the DevShop platform that will **directly parse and execu
 ### Phase 1: Listen and Ask (NO file creation)
 **Do NOT create, write, or modify any files during this phase.** Your only job is to ask questions and understand the project. File creation happens only after the developer types `go`.
 
+In your opening message, let the developer know they can drop `.md` files (product briefs, PRDs, feature lists, etc.) into `{{PROJECT_DIR}}/context/` and you'll use them as input. Check this directory — if files are already there, read them and incorporate them into your questions.
+
 When the developer describes what they want to build, ask probing questions:
 - **Problem & users:** What problem does this solve? Who uses it?
 - **Tech stack:** What language/framework? Any specific libraries or databases?
