@@ -78,6 +78,8 @@ Once all files are created and validated, tell the developer:
 
 The conventions file tells implementation agents **exactly** which tools, patterns, and styles to use. Be specific enough that an agent cannot accidentally use the wrong tool.
 
+{{>project-format}}
+
 {{>spec-format}}
 
 {{>roadmap-rules}}
