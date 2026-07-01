@@ -202,7 +202,13 @@
 ### Group A: Riley CLI Mode
 - [x] `riley-cli-session` — Replace Riley's in-process agent chat with spawning Claude Code CLI (like Morgan pair mode), enabling native tool use, streaming output, and consistent interactive experience across kickoff and talk commands
 
-## Phase XVI: Figma Design Workflow
+## Phase XVI: Morgan Orchestrator
+<!-- depends: Phase XV -->
+
+### Group A: Morgan Run Mode
+- [ ] `morgan-orchestrator` — Replace SDK-based isolated agent spawning in `run` command with Morgan as a persistent CLI session that reads the roadmap, implements items sequentially, and delegates to sub-agents for parallel groups
+
+## Phase XVII: Figma Design Workflow
 <!-- depends: Phase IX -->
 
 ### Group A: Design Foundations

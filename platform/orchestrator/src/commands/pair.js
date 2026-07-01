@@ -163,7 +163,7 @@ async function pairCommand(project, cliConfig) {
         resume: resumeSessionId,
         name: `Morgan — ${cliConfig.projectId}`,
         initialPrompt: resumeSessionId ? undefined : 'Introduce yourself and ask what I need help with.'
-      });
+      }).promise;
       isFirstRun = false;
     } else {
       // Re-enter: continue the most recent session
@@ -173,7 +173,7 @@ async function pairCommand(project, cliConfig) {
         model: pairAgentConfig?.model,
         name: `Morgan — ${cliConfig.projectId}`,
         initialPrompt: 'I re-entered the session because health checks failed. Please investigate and fix the failing checks.'
-      });
+      }).promise;
     }
 
     // Save session for future resume

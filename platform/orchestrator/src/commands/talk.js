@@ -163,7 +163,7 @@ async function talkCommand(project, cliConfig) {
         resume: resumeSessionId,
         name: `Riley — ${cliConfig.projectId}`,
         initialPrompt: resumeSessionId ? undefined : 'Greet me and ask what I\'d like to discuss about this project.'
-      });
+      }).promise;
       isFirstRun = false;
     } else {
       // Re-enter: continue the most recent session
@@ -173,7 +173,7 @@ async function talkCommand(project, cliConfig) {
         model: talkAgentConfig?.model,
         name: `Riley — ${cliConfig.projectId}`,
         initialPrompt: 'I re-entered the session because there were format validation issues. Please check and fix any roadmap or requirements format problems in the openspec/ directory.'
-      });
+      }).promise;
     }
 
     // Save session for future resume

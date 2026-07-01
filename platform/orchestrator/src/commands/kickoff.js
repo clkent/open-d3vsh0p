@@ -112,7 +112,7 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
         sessionId: claudeSessionId,
         name: `Riley — ${projectId} kickoff`,
         initialPrompt: 'Introduce yourself and ask me what I want to build.'
-      });
+      }).promise;
       isFirstRun = false;
     } else {
       // Re-enter: continue the most recent session in this project directory
@@ -122,7 +122,7 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
         model: kickoffAgentConfig.model,
         name: `Riley — ${projectId} kickoff`,
         initialPrompt: 'I re-entered the session because there were validation issues with the specs/roadmap. Please check the openspec/ directory and fix any missing or malformed files.'
-      });
+      }).promise;
     }
 
     // Save session for reference
