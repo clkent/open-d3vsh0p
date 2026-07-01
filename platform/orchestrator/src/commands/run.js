@@ -215,7 +215,9 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     sessionId: claudeSessionId,
     resume: resumeSessionId,
     name: `Morgan — ${config.projectId}`,
-    initialPrompt: resumeSessionId ? undefined : initialPrompt
+    initialPrompt: resumeSessionId
+      ? 'Continue working through the roadmap from where you left off. Check roadmap.md for pending items.'
+      : initialPrompt
   });
 
   // Time limit enforcement
