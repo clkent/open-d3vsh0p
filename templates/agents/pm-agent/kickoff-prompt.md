@@ -71,7 +71,7 @@ After creating all files, verify your own output before considering the work com
 
 ### Phase 4: Hand Off
 Once all files are created and validated, tell the developer:
-- "All specs and roadmap are ready. Exit this session (Ctrl+C or /exit) and DevShop will run a bootstrap agent to set up the tech stack, then you can start the orchestrator with `./devshop run <project-id>`."
+- "All specs and roadmap are ready. Exit this session (Ctrl+C or /exit) and DevShop will run a bootstrap agent to set up the tech stack, then you can start the orchestrator with `./devshop run {{PROJECT_NAME}}`."
 - Do NOT claim that anything happens automatically while this session is still open. The bootstrap and orchestrator run **after** the developer exits.
 
 ### Conventions File Format
