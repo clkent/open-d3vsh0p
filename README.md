@@ -1,10 +1,10 @@
 # d3vsh0p
 
-**Open source AI code orchestration — turns product specs into tested, reviewed, and merged production code using Claude agents in parallel git worktrees.**
+**Open source AI code orchestration — turns product specs into tested, reviewed, and merged production code using Claude agents.**
 
-[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE) [![Built with Claude Agent SDK](https://img.shields.io/badge/Built%20with-Claude%20Agent%20SDK-orange.svg)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/sdk) [![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE) [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-orange.svg)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/sdk) [![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
 
-You define a product roadmap. d3vsh0p handles the rest — planning, implementation, testing, code review, and merging — all running concurrently in isolated git worktrees. It's not a code generator or a chat assistant. It's a deterministic Node.js state machine that produces real commits, real PRs, and real production code.
+You define a product roadmap. d3vsh0p handles the rest — planning, implementation, testing, and merging. Morgan (the principal engineer) runs as a persistent Claude Code CLI session, reads the full roadmap, implements items sequentially with complete project context, and delegates to sub-agents when parallelism helps. It produces real commits, real PRs, and real production code.
 
 **Website:** [d3vsh0p.com](https://d3vsh0p.com) · **Built by:** [Chelsea Kent](https://github.com/clkent) · **License:** [BSL 1.1](LICENSE)
 
@@ -61,41 +61,34 @@ The `~/projects/` directory is created automatically on first kickoff.
 
 ## How It Works
 
-The orchestrator reads a structured `openspec/roadmap.md` and organizes work into **phases** (ordered, with dependencies) containing **groups** (executed concurrently):
+Morgan (the principal engineer) reads the project's `openspec/roadmap.md` — a structured plan organized into **phases** (ordered, with dependencies) containing **groups** (independent work within a phase):
 
 ```
 Phase I: Foundation
-├── Group A: Database Setup     → Developer (worktree)
-├── Group B: Auth System        → Developer (worktree)
-└── Group C: API Scaffolding    → Developer (worktree)
+├── Group A: Database Setup
+├── Group B: Auth System
+└── Group C: API Scaffolding
 
 Phase II: Features (depends on Phase I)
-├── Group A: User Profiles      → Developer (worktree)
-└── Group B: Search             → Developer (worktree)
+├── Group A: User Profiles
+└── Group B: Search
 ```
 
-Each group runs in its own git worktree with an assigned agent persona. Groups within a phase execute in parallel via `Promise.allSettled()`. Phases execute sequentially, respecting dependency chains. Merges are serialized through an async mutex to prevent conflicts.
+Phases execute sequentially, respecting dependency chains. Within a phase, Morgan works through items and decides the best approach:
 
-Within each group, items are processed through **microcycles**:
+- **Sequential**: Morgan implements items directly when it has context from previous work, keeping patterns consistent across the codebase.
+- **Parallel delegation**: When a phase has multiple independent groups, Morgan can spawn sub-agents (via Claude Code's Agent tool with worktree isolation), giving each a targeted brief based on what Morgan has already built.
 
-```
-Select Item → Implement → Verify Imports → Test → Commit → Convention Check → Review → Merge
-      ↑                                                                          |
-      +────────────────── retry (tests fail or review rejects) ──────────────────+
-```
+For each item, Morgan:
+1. Reads the spec and existing code to understand patterns
+2. Implements the feature
+3. Runs the project's test suite
+4. Commits with a conventional commit message
+5. Marks the item complete in roadmap.md (`[ ]` → `[x]`)
 
-Each microcycle:
-1. Picks the next pending item from the group
-2. Runs an **implementation agent** (via Claude Agent SDK) to write the code
-3. Verifies imports (catches hallucinated modules)
-4. Runs the project's test suite
-5. If tests pass, commits on a work branch
-6. Checks project conventions (catches framework swaps)
-7. Runs the **principal engineer agent** to review the diff
-8. If approved, merges the work branch into the session branch
-9. If rejected, feeds the review feedback back to the implementation agent and retries
+If Morgan can't complete an item (persistent failures, missing dependencies), it parks the item (`[!]`) and moves on.
 
-Retries are capped. If exhausted, the requirement goes to a **parking lot** for human review.
+The user can interact with Morgan during a run — ask questions, course-correct, or let it work autonomously. For scheduled runs, Morgan works without human input.
 
 ### Spike Phases
 
@@ -114,16 +107,12 @@ Spikes bypass the microcycle — they use direct agent invocation on the session
 | Role | Persona | Responsibility | Authority |
 |---|---|---|---|
 | **PM** | Riley | Creates OpenSpec specs and roadmap from requirements | Write specs, manage roadmap |
-| **Implementation** | Developer (x4) | Writes code, tests, commits | Full tool access in project dir |
-| **Principal Engineer** | Morgan | Reviews code, approves/rejects | Merge authority, quality gate |
+| **Principal Engineer / Orchestrator** | Morgan | Reads roadmap, implements items, delegates sub-agents, runs tests | Full tool access, orchestration authority |
 | **Security** | Casey | Scans for vulnerabilities, audits code | Read-only, reports findings |
 | **Triage** | Drew | Classifies parked items as blocking/non-blocking | Read-only, no tools, JSON output |
-| **Spike Investigator** | Morgan | Investigates technical unknowns before implementation | Write new files, read-only on existing |
 | **Project Repair** | Morgan | Fixes baseline test/build failures before agents start | Full tool access in project dir |
 
-Four implementation agents (named Jordan, Alex, Sam, Taylor for log identification) are assigned randomly to groups via the **AgentPool**, using a Fisher-Yates shuffle to maximize variety. All use the same system prompt template.
-
-Agents are **stateless** — they're invoked fresh each time with a rendered system prompt via the Claude Agent SDK. The orchestrator maintains all state.
+Morgan runs as a persistent Claude Code CLI session with full project context. When delegating parallel work, Morgan spawns sub-agents with specific, scoped briefs — not generic prompts — and reviews their output before accepting it.
 
 ### Project Isolation
 
@@ -203,7 +192,7 @@ Brain dump session with Riley. Share additional ideas or refine existing specs �
 ./devshop run my-app
 ```
 
-The core engine. Reads the roadmap, organizes work into **phases** (sequential) and **groups** (parallel within a phase). Each group gets its own git worktree and a randomly assigned implementation agent. For each item, runs the microcycle: implement, test, commit, review (Morgan), merge. Failed items go to a parking lot after max retries.
+The core engine. Spawns Morgan as a persistent CLI session. Morgan reads the roadmap, works through items sequentially with full project context, and can delegate to sub-agents for parallel groups. You can interact with Morgan during the run or let it work autonomously. Items that can't be completed are parked for human review.
 
 ```bash
 ./devshop run my-app --budget 10 --time-limit 4    # Limit cost and time
