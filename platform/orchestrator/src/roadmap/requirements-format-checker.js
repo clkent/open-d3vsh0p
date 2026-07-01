@@ -56,7 +56,7 @@ function checkRequirementsContent(content) {
     if (nearMissHeaders.length > 0) {
       errors.push(`Found "${nearMissHeaders[0].trim()}" but expected exactly "## Requirements" (case-sensitive)`);
     } else {
-      errors.push('Missing "## Requirements" section — the orchestrator cannot find any requirements to implement');
+      errors.push('Missing "## Requirements" section in openspec/project.md — the orchestrator needs ### requirement headings with bullet points to know what to implement');
     }
     return { valid: false, errors, warnings };
   }

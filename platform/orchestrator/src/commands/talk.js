@@ -110,6 +110,7 @@ async function talkCommand(project, cliConfig) {
   // Render the talk prompt template
   const templateVars = {
     PROJECT_ID: cliConfig.projectId,
+    PROJECT_NAME: project.name,
     PROJECT_DIR: cliConfig.projectDir,
     TECH_STACK: techStack,
     GITHUB_REPO: cliConfig.githubRepo || '',
