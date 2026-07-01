@@ -174,7 +174,7 @@ Scaffolds a new git repo in `~/projects/`, registers it in `project-registry.jso
 
 Use `--design` to install [Impeccable](https://github.com/pbakaus/impeccable) design skills (typography, color, spacing, motion, responsive, UX writing) into the project's `.claude/skills/` directory. When design skills are present:
 
-- **Implementation agents** run `/polish` on new/modified `.tsx`, `.vue`, `.svelte`, `.jsx` files and run `/audit` before their final commit
+- **Morgan** runs `/impeccable polish` on new/modified `.tsx`, `.vue`, `.svelte`, `.jsx` files and runs `/impeccable audit` before committing
 - **Morgan (reviewer)** scores a `design_quality` dimension assessing spacing, typography, color contrast (WCAG AA), and responsive patterns
 - If you kick off a frontend project without `--design`, d3vsh0p suggests adding it
 

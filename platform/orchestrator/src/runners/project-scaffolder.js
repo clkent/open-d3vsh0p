@@ -172,7 +172,7 @@ class ProjectScaffolder {
   async _installDesignSkills(projectDir) {
     try {
       await this.logger.log('info', 'design_skills_installing', { projectDir });
-      await execFileAsync('npx', ['skills', 'add', 'pbakaus/impeccable', '-y'], {
+      await execFileAsync('npx', ['impeccable', 'install', '--providers=claude', '--scope=project'], {
         cwd: projectDir,
         timeout: 60000
       });

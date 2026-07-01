@@ -486,7 +486,7 @@ async function generateClaudeMd(projectDir) {
 
   if (hasDesignSkills) {
     content += `## Design Skills\n\n`;
-    content += `This project has Impeccable design skills installed. Use \`/polish\`, \`/audit\`, \`/critique\`, \`/typeset\`, \`/arrange\`, and other design commands when working on UI code. See \`.claude/skills/\` for available commands.\n\n`;
+    content += `This project has Impeccable design skills installed. Use \`/impeccable polish\`, \`/impeccable audit\`, \`/impeccable critique\`, and other design commands when working on UI code. See \`.claude/skills/\` for available commands.\n\n`;
   } else if (techStack && isFrontendTechStack(techStack)) {
     console.log('  Tip: This looks like a frontend project. Consider re-running with --design to install design skills.');
   }

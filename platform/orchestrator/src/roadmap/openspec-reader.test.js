@@ -519,8 +519,8 @@ Some deployment notes.
     it('returns design instructions when skills are present', async () => {
       fs.access = async () => {};
       const result = await reader.getDesignSkillsSection();
-      assert.ok(result.includes('/polish'));
-      assert.ok(result.includes('/audit'));
+      assert.ok(result.includes('/impeccable polish'));
+      assert.ok(result.includes('/impeccable audit'));
       assert.ok(result.includes('.tsx'));
     });
 

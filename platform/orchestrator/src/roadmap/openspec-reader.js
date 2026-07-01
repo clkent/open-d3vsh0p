@@ -360,8 +360,8 @@ OpenSpecReader.DESIGN_SKILLS_INSTRUCTIONS = `## Design Skills
 
 This project has Impeccable design skills installed. When working on frontend code:
 
-1. **Run \`/polish\`** on every new or modified \`.tsx\`, \`.vue\`, \`.svelte\`, or \`.jsx\` file before committing — this refines spacing, typography, and visual consistency
-2. **Run \`/audit\`** before your final commit — this checks design consistency across the codebase (color contrast, spacing system, responsive patterns)
+1. **Run \`/impeccable polish\`** on every new or modified \`.tsx\`, \`.vue\`, \`.svelte\`, or \`.jsx\` file before committing — this refines spacing, typography, and visual consistency
+2. **Run \`/impeccable audit\`** before your final commit — this checks design consistency across the codebase (color contrast, spacing system, responsive patterns)
 
 Only apply these to UI component files. Skip for config files, tests, utilities, and backend code.`;
 
