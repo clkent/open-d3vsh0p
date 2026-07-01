@@ -226,7 +226,7 @@ describe('generateClaudeMd', () => {
     const content = await fs.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
     assert.ok(content.includes('## Design Skills'));
     assert.ok(content.includes('Impeccable design skills installed'));
-    assert.ok(content.includes('/polish'));
+    assert.ok(content.includes('/impeccable polish'));
   });
 
   it('omits design skills section when .claude/skills/frontend-design does not exist', async () => {

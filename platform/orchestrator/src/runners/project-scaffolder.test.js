@@ -80,14 +80,14 @@ describe('ProjectScaffolder', () => {
       scaffolder._installDesignSkills = async function(projectDir) {
         // Simulate what _installDesignSkills does, with a mock exec
         await this.logger.log('info', 'design_skills_installing', { projectDir });
-        execCalledWith = { cmd: 'npx', args: ['skills', 'add', 'pbakaus/impeccable'], cwd: projectDir, timeout: 60000 };
+        execCalledWith = { cmd: 'npx', args: ['impeccable', 'install', '--providers=claude', '--scope=project'], cwd: projectDir, timeout: 60000 };
         await this.logger.log('info', 'design_skills_installed', { projectDir });
       };
 
       await scaffolder._installDesignSkills('/tmp/test-project');
 
       assert.equal(execCalledWith.cmd, 'npx');
-      assert.deepEqual(execCalledWith.args, ['skills', 'add', 'pbakaus/impeccable']);
+      assert.deepEqual(execCalledWith.args, ['impeccable', 'install', '--providers=claude', '--scope=project']);
       assert.equal(execCalledWith.cwd, '/tmp/test-project');
       assert.equal(execCalledWith.timeout, 60000);
       assert.ok(logger.entries.find(e => e.event === 'design_skills_installed'));
