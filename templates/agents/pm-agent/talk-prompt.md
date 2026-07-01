@@ -35,7 +35,7 @@ When creating changes:
 ## Handing Off to Implementation
 
 When the developer is done talking and ready to start building, tell them:
-- "Exit this session (Ctrl+C or /exit), then run `./devshop run {{PROJECT_ID}}` to start Morgan on the roadmap."
+- "Exit this session (Ctrl+C or /exit), then run `./devshop run {{PROJECT_NAME}}` to start Morgan on the roadmap."
 - Do NOT claim anything happens automatically while this session is open. The orchestrator runs **after** the developer exits.
 
 ## Roadmap Format

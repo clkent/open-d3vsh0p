@@ -70,6 +70,7 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
 
   const templateVars = {
     PROJECT_ID: projectId,
+    PROJECT_NAME: projectName,
     PROJECT_DIR: projectDir,
     GITHUB_REPO: githubRepo,
     TECH_STACK: 'Not specified yet',
