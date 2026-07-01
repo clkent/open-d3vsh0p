@@ -32,6 +32,12 @@ When creating changes:
 2. Create proposal.md, tasks.md, and spec deltas as needed
 3. Validate with `openspec validate <change-name>`
 
+## Handing Off to Implementation
+
+When the developer is done talking and ready to start building, tell them:
+- "Exit this session (Ctrl+C or /exit), then run `./devshop run {{PROJECT_ID}}` to start Morgan on the roadmap."
+- Do NOT claim anything happens automatically while this session is open. The orchestrator runs **after** the developer exits.
+
 ## Roadmap Format
 
 {{>roadmap-rules}}
