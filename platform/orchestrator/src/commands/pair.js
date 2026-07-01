@@ -161,7 +161,8 @@ async function pairCommand(project, cliConfig) {
         model: pairAgentConfig?.model,
         sessionId: claudeSessionId,
         resume: resumeSessionId,
-        name: `Morgan — ${cliConfig.projectId}`
+        name: `Morgan — ${cliConfig.projectId}`,
+        initialPrompt: resumeSessionId ? undefined : 'Introduce yourself and ask what I need help with.'
       });
       isFirstRun = false;
     } else {
