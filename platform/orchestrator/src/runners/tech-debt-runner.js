@@ -110,7 +110,7 @@ class TechDebtRunner {
       systemPrompt: techDebtPrompt,
       userPrompt,
       workingDir: this.projectDir,
-      model: agentConfig.model || 'claude-sonnet-4-6',
+      model: agentConfig.model,
       maxBudgetUsd: agentConfig.maxBudgetUsd || 3,
       timeoutMs: agentConfig.timeoutMs || 600000,
       allowedTools: agentConfig.allowedTools || ['Read', 'Glob', 'Grep', 'Bash', 'Edit', 'Write']

@@ -135,7 +135,7 @@ describe('run command — Morgan CLI args', () => {
     const args = buildClaudeArgs({
       appendSystemPrompt: 'Morgan orchestration prompt content',
       sessionId: 'run-session-001',
-      model: 'claude-sonnet-4-6',
+      model: 'test-model',
       name: 'Morgan — proj-001',
       initialPrompt: 'Read the roadmap and start working.'
     });
@@ -152,7 +152,7 @@ describe('run command — Morgan CLI args', () => {
   it('builds args with resume for continued run', () => {
     const args = buildClaudeArgs({
       resume: 'prev-session-id',
-      model: 'claude-sonnet-4-6',
+      model: 'test-model',
       name: 'Morgan — proj-001'
     });
 

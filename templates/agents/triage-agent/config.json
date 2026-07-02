@@ -1,7 +1,6 @@
 {
   "role": "triage",
   "name": "Drew",
-  "model": "claude-sonnet-4-6",
   "temperature": 0.2,
   "autoStart": false,
   "permissions": {
