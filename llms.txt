@@ -6,7 +6,7 @@ Built by Chelsea Kent (@clkent). Licensed under BSL 1.1.
 
 ## What This Repo Is
 
-d3vsh0p orchestrates Claude agents to build software from a structured roadmap. Riley (PM agent) creates specs and a roadmap from your idea. Morgan (principal engineer) runs as a persistent Claude Code CLI session, reads the full roadmap, implements items sequentially with complete project context, and delegates to sub-agents when parallelism helps. All work produces real commits, real PRs, and real production code.
+d3vsh0p orchestrates Claude agents to build software from a structured roadmap. A PM agent creates specs and a roadmap from your idea. A principal engineer agent runs as a persistent Claude Code CLI session, reads the full roadmap, implements items sequentially with complete project context, and delegates to sub-agents when parallelism helps. All work produces real commits, real PRs, and real production code.
 
 ## Project Structure
 
@@ -14,7 +14,7 @@ d3vsh0p orchestrates Claude agents to build software from a structured roadmap. 
 platform/orchestrator/          — The brain. Node.js orchestrator that drives everything
   src/index.js                  — CLI entry point (devshop command)
   src/commands/                 — CLI commands: kickoff, run, talk, pair, status, etc.
-  src/commands/run.js           — Spawns Morgan CLI for roadmap execution
+  src/commands/run.js           — Spawns principal engineer CLI for roadmap execution
   src/commands/cli-spawn.js     — Shared Claude CLI spawn utilities
   src/agents/                   — Agent runner, session, and template engine
   src/git/                      — Git operations, merge, consolidation
@@ -25,10 +25,10 @@ platform/orchestrator/          — The brain. Node.js orchestrator that drives 
   src/scheduler/                — launchd/cron integration for automated runs
 
 templates/agents/               — System prompt templates for each agent role
-  pm-agent/                     — Riley — creates specs and roadmaps via interactive Q&A
-  principal-engineer/           — Morgan — orchestrates runs, reviews, repairs, pairs
-  security-agent/               — Casey — vulnerability scanning
-  triage-agent/                 — Drew — classifies parked items
+  pm-agent/                     — PM agent — creates specs and roadmaps via interactive Q&A
+  principal-engineer/           — Principal engineer — orchestrates runs, reviews, repairs, pairs
+  security-agent/               — Security agent — vulnerability scanning
+  triage-agent/                 — Triage agent — classifies parked items
   _shared/                      — Shared prompt partials (roadmap rules, delegation, etc.)
 
 openspec/                       — d3vsh0p's own specs (it uses OpenSpec on itself)
@@ -39,28 +39,28 @@ templates/project-starter/      — Starter code copied when creating new projec
 ## Key Concepts
 
 ### Two Agents, One Workflow
-- **Riley (PM)** — Creates OpenSpec specs and a phased roadmap from your idea through interactive Q&A
-- **Morgan (Principal Engineer)** — Persistent CLI session that reads the roadmap, implements items, runs tests, commits, and marks progress. Delegates to sub-agents for parallel groups with scoped briefs.
+- **PM Agent** — Creates OpenSpec specs and a phased roadmap from your idea through interactive Q&A
+- **Principal Engineer Agent** — Persistent CLI session that reads the roadmap, implements items, runs tests, commits, and marks progress. Delegates to sub-agents for parallel groups with scoped briefs.
 
 ### Phases and Groups
-The roadmap organizes work into phases (sequential, with dependencies) containing groups (independent work). Morgan works through phases in order, implementing items or delegating groups to sub-agents when parallelism helps.
+The roadmap organizes work into phases (sequential, with dependencies) containing groups (independent work). The principal engineer works through phases in order, implementing items or delegating groups to sub-agents when parallelism helps.
 
 ### CLI Sessions
 All interactive commands (kickoff, run, talk, pair) spawn Claude Code CLI sessions with `stdio: 'inherit'`. The user interacts directly with the agent. Sessions can be resumed with `--resume`.
 
 ### Git Strategy
-- Morgan commits directly on the current branch during runs
-- Session branches auto-consolidate to main via PR when Morgan finishes
+- The principal engineer commits directly on the current branch during runs
+- Session branches auto-consolidate to main via PR when the session finishes
 - Sub-agents use worktree isolation via Claude Code's Agent tool
 
 ## Key Files to Read First
 
-1. `platform/orchestrator/src/commands/run.js` — Entry point for `./devshop run`, spawns Morgan CLI
-2. `templates/agents/principal-engineer/run-prompt.md` — Morgan's orchestration instructions
-3. `templates/agents/_shared/roadmap-execution-rules.md` — How Morgan works through the roadmap
-4. `templates/agents/_shared/sub-agent-delegation.md` — When and how Morgan delegates
+1. `platform/orchestrator/src/commands/run.js` — Entry point for `./devshop run`, spawns principal engineer CLI
+2. `templates/agents/principal-engineer/run-prompt.md` — Principal engineer orchestration instructions
+3. `templates/agents/_shared/roadmap-execution-rules.md` — How the agent works through the roadmap
+4. `templates/agents/_shared/sub-agent-delegation.md` — When and how the agent delegates
 5. `platform/orchestrator/src/commands/cli-spawn.js` — Shared CLI spawn utilities
-6. `platform/orchestrator/src/commands/kickoff.js` — Project creation flow with Riley
+6. `platform/orchestrator/src/commands/kickoff.js` — Project creation flow with PM agent
 7. `platform/orchestrator/src/roadmap/roadmap-reader.js` — Roadmap parsing and item marking
 8. `platform/orchestrator/src/agents/template-engine.js` — How system prompts are rendered
 9. `CLAUDE.md` — Instructions for AI assistants working on this codebase
