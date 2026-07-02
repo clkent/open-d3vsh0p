@@ -17,7 +17,7 @@
       "allowedTools": ["Bash", "Edit", "Read", "Write", "Glob", "Grep"]
     },
     "principal-engineer": {
-      "model": "claude-sonnet-4-6",
+      "model": "claude-opus-4-6",
       "maxBudgetUsd": 2.00,
       "timeoutMs": 120000,
       "allowedTools": ["Read", "Glob", "Grep", "Bash"]
