@@ -1,83 +1,73 @@
 # d3vsh0p
 
-> Open source AI code orchestration — a Node.js state machine that turns product specs into tested, reviewed, and merged production code using Claude agents in parallel git worktrees.
+> Open source AI code orchestration — turns product specs into tested, reviewed, and merged production code using Claude agents.
 
 Built by Chelsea Kent (@clkent). Licensed under BSL 1.1.
 
 ## What This Repo Is
 
-d3vsh0p is a deterministic orchestrator, not a framework or library. It reads a structured roadmap, dispatches Claude agents to isolated git worktrees, runs them through implement → test → review → merge microcycles, and consolidates everything to main via PR. Agents are stateless — invoked fresh each time via the Anthropic Agent SDK with only the context they need.
+d3vsh0p orchestrates Claude agents to build software from a structured roadmap. Riley (PM agent) creates specs and a roadmap from your idea. Morgan (principal engineer) runs as a persistent Claude Code CLI session, reads the full roadmap, implements items sequentially with complete project context, and delegates to sub-agents when parallelism helps. All work produces real commits, real PRs, and real production code.
 
 ## Project Structure
 
 ```
-platform/orchestrator/          — The brain. Node.js state machine that drives everything
+platform/orchestrator/          — The brain. Node.js orchestrator that drives everything
   src/index.js                  — CLI entry point (devshop command)
-  src/microcycle.js             — Core loop: implement → test → review → merge per item
-  src/parallel-orchestrator.js  — Runs groups concurrently in parallel worktrees
-  src/session/state-machine.js  — State transitions for the orchestrator
-  src/agents/                   — Agent pool, runner, session, and template engine
-  src/commands/                 — CLI commands: kickoff, run, plan, pair, recover, etc.
-  src/git/                      — Git operations, merge mutex, recovery manager
-  src/quality/                  — Import verification, convention checks, health checks, review parsing
-  src/runners/                  — Triage, repair, security, scaffolding, interventions
-  src/session/                  — Cost tracking, state machine, path utils
-  src/api/                      — REST API server (optional)
+  src/commands/                 — CLI commands: kickoff, run, talk, pair, status, etc.
+  src/commands/run.js           — Spawns Morgan CLI for roadmap execution
+  src/commands/cli-spawn.js     — Shared Claude CLI spawn utilities
+  src/agents/                   — Agent runner, session, and template engine
+  src/git/                      — Git operations, merge, consolidation
+  src/quality/                  — Health checks, convention checks, review parsing
+  src/roadmap/                  — Roadmap reader/writer, format checkers, OpenSpec reader
+  src/runners/                  — Repair, security, scaffolding
+  src/session/                  — Cost tracking, session utils, path utils
+  src/scheduler/                — launchd/cron integration for automated runs
 
 templates/agents/               — System prompt templates for each agent role
-  implementation-agent/         — Developer agents (Jordan, Alex, Sam, Taylor)
-  pm-agent/                     — Riley — creates specs and roadmaps from requirements
-  principal-engineer/           — Morgan — reviews code, approves/rejects, investigates spikes
-  security-agent/               — Casey — vulnerability scanning and security audits
-  triage-agent/                 — Drew — classifies parked items as blocking/non-blocking
-  spike-agent/                  — Morgan (spike mode) — investigates technical unknowns
-  _shared/                      — Shared prompt fragments included across agents
+  pm-agent/                     — Riley — creates specs and roadmaps via interactive Q&A
+  principal-engineer/           — Morgan — orchestrates runs, reviews, repairs, pairs
+  security-agent/               — Casey — vulnerability scanning
+  triage-agent/                 — Drew — classifies parked items
+  _shared/                      — Shared prompt partials (roadmap rules, delegation, etc.)
 
 openspec/                       — d3vsh0p's own specs (it uses OpenSpec on itself)
 active-agents/                  — Per-project runtime state and session logs
 templates/project-starter/      — Starter code copied when creating new projects
-project-registry.example.json   — Example of the project index
 ```
 
 ## Key Concepts
 
-### The Microcycle
-Every roadmap item runs through: Select Item → Implement → Verify Imports → Test → Commit → Convention Check → Review → Merge. Failed items retry (capped), then go to a parking lot for human review.
+### Two Agents, One Workflow
+- **Riley (PM)** — Creates OpenSpec specs and a phased roadmap from your idea through interactive Q&A
+- **Morgan (Principal Engineer)** — Persistent CLI session that reads the roadmap, implements items, runs tests, commits, and marks progress. Delegates to sub-agents for parallel groups with scoped briefs.
 
 ### Phases and Groups
-The roadmap is organized into phases (sequential, with dependencies) containing groups (concurrent). Each group gets its own git worktree and a randomly assigned agent from the pool.
+The roadmap organizes work into phases (sequential, with dependencies) containing groups (independent work). Morgan works through phases in order, implementing items or delegating groups to sub-agents when parallelism helps.
 
-### Agent Roles
-- **Riley (PM)** — Creates OpenSpec specs and roadmap from brain dumps
-- **Developer agents (x4)** — Jordan, Alex, Sam, Taylor — write code in isolated worktrees
-- **Morgan (Principal Engineer)** — Reviews diffs, approves/rejects, investigates spikes, repairs broken projects
-- **Casey (Security)** — Scans for vulnerabilities
-- **Drew (Triage)** — Classifies parked items as blocking vs non-blocking
-
-### State Machine
-The orchestrator is a state machine (`src/session/state-machine.js`) with states like SELECTING_REQUIREMENT, IMPLEMENTING, TESTING, REVIEWING, MERGING, PROJECT_REPAIR, etc. All state is persisted to `state.json` — agents themselves are stateless.
+### CLI Sessions
+All interactive commands (kickoff, run, talk, pair) spawn Claude Code CLI sessions with `stdio: 'inherit'`. The user interacts directly with the agent. Sessions can be resumed with `--resume`.
 
 ### Git Strategy
-- Session branches (`devshop/session-{timestamp}`) accumulate approved work
-- Work branches (`devshop/work-{timestamp}/{requirement-id}`) are per-requirement
-- Worktree branches (`devshop/worktree-{sessionId}/group-{letter}`) are per-group, temporary
-- Merges are serialized through an async mutex (`src/git/merge-lock.js`)
+- Morgan commits directly on the current branch during runs
+- Session branches auto-consolidate to main via PR when Morgan finishes
+- Sub-agents use worktree isolation via Claude Code's Agent tool
 
 ## Key Files to Read First
 
-1. `platform/orchestrator/src/microcycle.js` — The core loop, understand this and you understand d3vsh0p
-2. `platform/orchestrator/src/parallel-orchestrator.js` — How groups run concurrently
-3. `platform/orchestrator/src/session/state-machine.js` — All orchestrator state transitions
-4. `platform/orchestrator/src/agents/agent-runner.js` — How agents are invoked via the Claude Agent SDK
-5. `platform/orchestrator/src/agents/template-engine.js` — How system prompts are rendered per-agent
-6. `platform/orchestrator/src/git/git-ops.js` — Worktree management, branching, merging
-7. `platform/orchestrator/src/commands/run.js` — Entry point for `./devshop run`
-8. `templates/agents/implementation-agent/` — What the developer agents see
+1. `platform/orchestrator/src/commands/run.js` — Entry point for `./devshop run`, spawns Morgan CLI
+2. `templates/agents/principal-engineer/run-prompt.md` — Morgan's orchestration instructions
+3. `templates/agents/_shared/roadmap-execution-rules.md` — How Morgan works through the roadmap
+4. `templates/agents/_shared/sub-agent-delegation.md` — When and how Morgan delegates
+5. `platform/orchestrator/src/commands/cli-spawn.js` — Shared CLI spawn utilities
+6. `platform/orchestrator/src/commands/kickoff.js` — Project creation flow with Riley
+7. `platform/orchestrator/src/roadmap/roadmap-reader.js` — Roadmap parsing and item marking
+8. `platform/orchestrator/src/agents/template-engine.js` — How system prompts are rendered
 9. `CLAUDE.md` — Instructions for AI assistants working on this codebase
 
 ## How to Modify Agent Behavior
 
-Agent prompts live in `templates/agents/<role>/`. Each has a system prompt template with Handlebars-style variables (`{{projectName}}`, `{{specContent}}`, etc.) that the template engine fills at runtime. To change what an agent does, edit its system prompt. To change what context it receives, edit `src/agents/template-engine.js`.
+Agent prompts live in `templates/agents/<role>/`. Each has a system prompt template with Handlebars-style variables (`{{PROJECT_ID}}`, `{{ROADMAP_CONTENT}}`, etc.) that the template engine fills at runtime. Shared partials in `_shared/` are included via `{{>partial-name}}`. To change what an agent does, edit its prompt template.
 
 ## How to Add a New Command
 
@@ -92,7 +82,7 @@ Agent prompts live in `templates/agents/<role>/`. Each has a system prompt templ
 cd platform/orchestrator && npm test
 ```
 
-Tests are colocated with source files (`*.test.js`). Integration tests are suffixed `.integration.test.js`. A pre-commit hook runs tests automatically when orchestrator files change.
+Tests are colocated with source files (`*.test.js`). A pre-commit hook runs tests automatically when orchestrator files change.
 
 ## Links
 
