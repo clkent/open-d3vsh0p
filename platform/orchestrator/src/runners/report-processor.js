@@ -104,7 +104,7 @@ async function _handleBugReport(report, options) {
   const session = new AgentSession(agentRunner, templateEngine, {
     templatesDir,
     projectDir,
-    pmModel: 'claude-sonnet-4-6',
+    pmModel: undefined,
     pmBudgetUsd: 3,
     pmTimeoutMs: 300000,
     allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']
@@ -183,7 +183,7 @@ async function _handleFeatureRequest(report, options) {
   const session = new AgentSession(agentRunner, templateEngine, {
     templatesDir,
     projectDir,
-    pmModel: 'claude-sonnet-4-6',
+    pmModel: undefined,
     pmBudgetUsd: 2,
     pmTimeoutMs: 180000,
     allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep']

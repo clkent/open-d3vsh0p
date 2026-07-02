@@ -274,7 +274,7 @@ async function bootstrapProject(agentRunner, templateEngine, config, logger) {
   const bootstrapSession = new AgentSession(agentRunner, templateEngine, {
     templatesDir: config.templatesDir,
     projectDir: config.projectDir,
-    pmModel: 'claude-sonnet-4-6',
+    pmModel: undefined,
     pmBudgetUsd: 5,
     pmTimeoutMs: 600000,
     allowedTools: ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'Edit']
