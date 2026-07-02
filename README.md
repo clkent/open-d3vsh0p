@@ -8,60 +8,28 @@ You define a product roadmap. d3vsh0p handles the rest — planning, implementat
 
 **Website:** [d3vsh0p.com](https://d3vsh0p.com) · **Built by:** [Chelsea Kent](https://github.com/clkent) · **License:** [BSL 1.1](LICENSE)
 
-### Quick Start
+## Quick Start
 
 ```bash
 gh repo fork clkent/open-d3vsh0p --clone
 cd open-d3vsh0p/platform/orchestrator && npm install
-./devshop kickoff my-app    # Chat with Riley (PM agent), describe your idea, type "go"
-./devshop run my-app        # Agents build it — in parallel, with tests and code review
+./devshop kickoff my-app    # Chat with Riley, describe your idea, type "go"
+./devshop run my-app        # Morgan builds it
 ```
-
----
-
-> **Note:** Orchestrator agents run with `bypassPermissions` enabled — they have full tool access within project directories. All agent work is reviewed by the principal engineer agent (Morgan) before merge. See [SECURITY.md](SECURITY.md) for the full trust model.
-
-## Architecture
-
-```
-devshop/
-├── active-agents/           # Per-project runtime state
-│   └── {project-id}/
-│       └── orchestrator/    # State machine state + session logs
-├── platform/                # d3vsh0p platform code
-│   └── orchestrator/        # The brain — Node.js state machine
-├── templates/               # Blueprints copied when creating new projects/agents
-│   ├── agents/              # Agent templates (system prompts + configs)
-│   └── project-starter/     # Starter code for new projects
-├── openspec/                # d3vsh0p's own specs
-├── project-registry.json    # Index of all managed projects
-└── README.md
-```
-
-## Getting Started
 
 ### Prerequisites
 - Node.js 20+
-- An Anthropic API key (set `ANTHROPIC_API_KEY` in your environment)
+- Claude Code CLI installed
 - GitHub CLI (`gh`) — authenticated via `gh auth login`
-
-### Install
-```bash
-git clone https://github.com/clkent/open-d3vsh0p.git
-cd open-d3vsh0p/platform/orchestrator
-npm install
-```
-
-### Your First Project
-```bash
-./devshop kickoff my-first-app
-```
-
-The `~/projects/` directory is created automatically on first kickoff.
 
 ## How It Works
 
-Morgan (the principal engineer) reads the project's `openspec/roadmap.md` — a structured plan organized into **phases** (ordered, with dependencies) containing **groups** (independent work within a phase):
+Two agents, one workflow:
+
+- **Riley** (PM) — Creates specs and a phased roadmap from your idea through interactive Q&A
+- **Morgan** (Principal Engineer) — Reads the roadmap, implements items with full project context, tests, commits, and marks progress
+
+Morgan reads `openspec/roadmap.md` — a structured plan organized into **phases** (sequential, with dependencies) containing **groups** (independent work within a phase):
 
 ```
 Phase I: Foundation
@@ -74,11 +42,6 @@ Phase II: Features (depends on Phase I)
 └── Group B: Search
 ```
 
-Phases execute sequentially, respecting dependency chains. Within a phase, Morgan works through items and decides the best approach:
-
-- **Sequential**: Morgan implements items directly when it has context from previous work, keeping patterns consistent across the codebase.
-- **Parallel delegation**: When a phase has multiple independent groups, Morgan can spawn sub-agents (via Claude Code's Agent tool with worktree isolation), giving each a targeted brief based on what Morgan has already built.
-
 For each item, Morgan:
 1. Reads the spec and existing code to understand patterns
 2. Implements the feature
@@ -86,226 +49,64 @@ For each item, Morgan:
 4. Commits with a conventional commit message
 5. Marks the item complete in roadmap.md (`[ ]` → `[x]`)
 
-If Morgan can't complete an item (persistent failures, missing dependencies), it parks the item (`[!]`) and moves on.
+When a phase has multiple independent groups, Morgan can delegate to sub-agents with specific, scoped briefs and worktree isolation. When items can't be completed, Morgan parks them (`[!]`) and moves on.
 
-The user can interact with Morgan during a run — ask questions, course-correct, or let it work autonomously. For scheduled runs, Morgan works without human input.
+You can interact with Morgan during a run — ask questions, course-correct, or let it work autonomously on a schedule.
 
-### Spike Phases
+## Commands
 
-When Riley identifies technical unknowns during kickoff (unfamiliar APIs, novel algorithms, architectural bets), she creates `[SPIKE]` items in a dedicated first phase. The orchestrator detects these and routes them to Morgan for investigation instead of the normal microcycle:
-
-1. **Kickoff** — Riley creates `[SPIKE]` items in Phase I for genuine uncertainties
-2. **Run** — Morgan investigates each spike, writes findings to `openspec/spikes/<id>/findings.md`
-3. **Auto-pause** — Orchestrator pauses with `stopReason: spike_review_pending`
-4. **Review** — User reads findings (locally or on GitHub PR)
-5. **Resume** — `./devshop run <project> --resume` continues with implementation phases
-
-Spikes bypass the microcycle — they use direct agent invocation on the session branch (no worktrees). Each spike produces a findings file with Question, Findings, Recommendation (PROCEED/ADJUST/HIGH-RISK), and optional POC evidence.
-
-### Agent Roles
-
-| Role | Persona | Responsibility | Authority |
-|---|---|---|---|
-| **PM** | Riley | Creates OpenSpec specs and roadmap from requirements | Write specs, manage roadmap |
-| **Principal Engineer / Orchestrator** | Morgan | Reads roadmap, implements items, delegates sub-agents, runs tests | Full tool access, orchestration authority |
-| **Security** | Casey | Scans for vulnerabilities, audits code | Read-only, reports findings |
-| **Triage** | Drew | Classifies parked items as blocking/non-blocking | Read-only, no tools, JSON output |
-| **Project Repair** | Morgan | Fixes baseline test/build failures before agents start | Full tool access in project dir |
-
-Morgan runs as a persistent Claude Code CLI session with full project context. When delegating parallel work, Morgan spawns sub-agents with specific, scoped briefs — not generic prompts — and reviews their output before accepting it.
-
-### Project Isolation
-
-Projects live in `~/projects/`, not inside d3vsh0p. The `project-registry.json` maps project IDs to their directories:
-
-```json
-{
-  "projects": [{
-    "id": "proj-000-my-app",
-    "name": "My App",
-    "projectDir": "~/projects/my-app",
-    "status": "active",
-    "preview": {
-      "command": "npm run dev",
-      "port": 3000
-    }
-  }]
-}
-```
-
-Each project is its own git repo, its own npm package, its own GitHub repository. d3vsh0p orchestrates the work but doesn't own the code. CLI commands accept either the full project ID (`proj-000-my-app`) or just the name portion (`my-app`).
-
-### Preview Smoke Check
-
-When a project has a `preview` field in its registry entry, the orchestrator runs a lightweight smoke check after each successful merge. It spawns the dev server, polls `http://localhost:<port>` for a response, and kills the process. If the server responds, the project is marked as previewable in the session state and morning digest.
-
-- **Opt-in**: only runs if `preview.command` and `preview.port` are configured
-- **Non-blocking**: failure is logged but never stops the session
-- **Timeout**: defaults to 10 seconds, configurable via `preview.timeoutSeconds`
-
-### Git Strategy
-
-- **Session branch** (`devshop/session-{timestamp}`) — created from main, accumulates approved work
-- **Work branches** (`devshop/work-{timestamp}/{requirement-id}`) — one per requirement, based on the session branch
-- **Worktree branches** (`devshop/worktree-{sessionId}/group-{letter}`) — one per parallel group, temporary
-- Implementation agents commit on work branches within their group's worktree
-- Principal engineer reviews before merge to session branch
-- Session branch is pushed to GitHub after each phase and at session end
-- At session end, the session branch is auto-consolidated to main via PR (disable with `--no-consolidate`)
-
-### OpenSpec as the Contract Layer
-
-Every project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for structured requirements. The PM agent (Riley) creates specs and a `roadmap.md` that organizes requirements into phases and groups. The orchestrator reads the roadmap to determine execution order and dependencies.
-
-d3vsh0p itself also uses OpenSpec — see the `openspec/` directory in this repo.
-
-## Usage
-
-All commands accept either the full project ID (`proj-000-my-app`) or just the name (`my-app`).
-
-### 1. Create a Project
+### kickoff — Create a new project
 
 ```bash
 ./devshop kickoff my-app
-./devshop kickoff my-app --design    # Install Impeccable design skills for frontend projects
+./devshop kickoff my-app --design    # Add Impeccable design skills for frontend projects
 ```
 
-Scaffolds a new git repo in `~/projects/`, registers it in `project-registry.json`, and drops you into an interactive chat with **Riley** (PM agent). Describe what you want to build, Riley asks clarifying questions, then type `go` — she creates OpenSpec specs and a roadmap. Type `push` to commit everything to GitHub.
+Scaffolds a new repo, drops you into an interactive session with Riley. Describe what you want to build, Riley asks questions, type `go` to generate specs and roadmap. A bootstrap agent sets up the tech stack after Riley finishes.
 
-Use `--design` to install [Impeccable](https://github.com/pbakaus/impeccable) design skills (typography, color, spacing, motion, responsive, UX writing) into the project's `.claude/skills/` directory. When design skills are present:
-
-- **Morgan** runs `/impeccable polish` on new/modified `.tsx`, `.vue`, `.svelte`, `.jsx` files and runs `/impeccable audit` before committing
-- **Morgan (reviewer)** scores a `design_quality` dimension assessing spacing, typography, color contrast (WCAG AA), and responsive patterns
-- If you kick off a frontend project without `--design`, d3vsh0p suggests adding it
-
-### 2. Refine Specs
-
-```bash
-./devshop plan my-app
-```
-
-Brain dump session with Riley. Share additional ideas or refine existing specs — she updates the specs and roadmap. Auto-resumes the previous session (use `--fresh` to start over). Type `push` when ready, `done` to save and exit.
-
-### 3. Build It
+### run — Build from the roadmap
 
 ```bash
 ./devshop run my-app
+./devshop run my-app --resume              # Continue where you left off
+./devshop run my-app --budget 10           # Limit spend (default: $30)
+./devshop run my-app --time-limit 4        # Limit hours (default: 7)
 ```
 
-The core engine. Spawns Morgan as a persistent CLI session. Morgan reads the roadmap, works through items sequentially with full project context, and can delegate to sub-agents for parallel groups. You can interact with Morgan during the run or let it work autonomously. Items that can't be completed are parked for human review.
+Spawns Morgan to work through the roadmap. Session branch auto-consolidates to main via PR when Morgan finishes.
 
-```bash
-./devshop run my-app --budget 10 --time-limit 4    # Limit cost and time
-./devshop run my-app --window night                  # Run in a specific time window
-./devshop run my-app --requirements user-auth        # Work on specific items only
-./devshop run my-app --resume                        # Resume an interrupted session
-./devshop run my-app --no-consolidate                 # Skip auto-merge of session branch to main
-```
-
-### 4. Talk to Riley Mid-Project
+### talk — Chat with Riley mid-project
 
 ```bash
 ./devshop talk my-app
 ```
 
-Update specs or roadmap while development is in progress. Same interactive flow as `plan`.
+Interactive session with Riley to update specs, adjust the roadmap, or discuss the project. Riley has context about current progress. When you're done, exit and run `./devshop run` to continue building.
 
-### 5. Debug with Morgan
+### pair — Debug with Morgan
 
 ```bash
 ./devshop pair my-app
-./devshop pair my-app --resume    # Resume a previous pair session
+./devshop pair my-app --resume
 ```
 
-Interactive session with Morgan (principal engineer) to diagnose and fix issues. Morgan gets pre-loaded context: session state, roadmap progress, and parked items with failure reasons. Type `push` to commit Morgan's fixes to GitHub, or they auto-push when you type `done`.
+Interactive session with Morgan to diagnose and fix issues. Morgan has context about parked items and failure reasons.
 
-### 6. Resolve Manual Items
-
-```bash
-./devshop action my-app
-```
-
-Interactive walkthrough of `[HUMAN]`-tagged roadmap items — things that need manual intervention like API keys, service configuration, or external setup. Guides you through each item and marks them complete in the roadmap.
-
-Includes **runtime-discovered interventions**: when agents park items due to errors that need human action (code signing, missing credentials, toolchain issues), d3vsh0p automatically classifies them, generates step-by-step instructions, and surfaces them in the action command. Resolved interventions are automatically retried on `--resume`.
-
-### 7. Recover from Crashes
-
-```bash
-./devshop recover my-app
-```
-
-Detects and cleans up orphaned resources left behind when a session crashes (OOM, power loss, force-kill). Removes orphaned worktrees under `.worktrees/`, deletes stale `devshop/*` branches from previous sessions, and reconciles `state.json` by clearing phantom active agents. Recovery also runs automatically at the start of every session.
-
-On `--fresh` restart, before recovery deletes stale branches, the orchestrator extracts diffs from `devshop/work-*` branches for items that were parked due to infrastructure failures (timeout, SIGKILL, maxBuffer, etc.). These diffs are passed to the new agent as a starting point, avoiding duplicate work. Items parked due to code failures (test failures, review rejections) are not salvaged — the agent starts fresh to avoid anchoring on bad code.
-
-### 8. Manage Scheduling
-
-```bash
-./devshop schedule install my-app    # Arm the daily cycle scheduler
-./devshop schedule status my-app     # Show which windows are installed/loaded/paused
-./devshop schedule pause my-app      # Temporarily stop all scheduled runs
-./devshop schedule resume my-app     # Restart paused schedule
-./devshop schedule remove my-app     # Fully remove the schedule
-./devshop schedule dry-run my-app    # Preview what would be installed
-```
-
-Installs launchd plists (macOS) or cron entries (Linux) to run cycles automatically. Pause/resume lets you temporarily stop cycles without removing the configuration.
-
-### 9. Maintenance Cadences
-
-```bash
-./devshop cadence run my-app --type weekly     # Stale branch cleanup, dead worktree removal
-./devshop cadence run my-app --type monthly    # Archive parked items, cost review
-./devshop cadence status my-app                # Show cadence config
-```
-
-### 10. Report Bugs or Request Features
-
-```bash
-./devshop report my-app              # Submit a bug report or feature request
-./devshop report my-app --status     # Check report processing status
-```
-
-Queue bug reports (for Morgan) or feature requests (for Riley) while the orchestrator is running. Reports are processed at the safe point between phases — no git conflicts, no interrupting running agents. Morgan fixes bugs on the session branch (test-gated). Riley creates specs and adds roadmap items to future phases.
-
-### 11. Security Scan
-
-```bash
-./devshop security my-app                          # Full security audit (Casey)
-./devshop security my-app --focus secrets,deps      # Scan specific areas only
-./devshop security my-app --budget 5 --timeout 10   # Override budget ($) and timeout (minutes)
-./devshop security my-app --schedule weekly          # Schedule recurring scans (randomized day/time)
-./devshop security my-app --unschedule               # Remove scheduled scans
-```
-
-Runs a standalone Casey security scan against a project. Findings are written to `openspec/scans/<date>-security.md` inside the project (not GitHub Issues, for security sensitivity). Focus areas: `secrets`, `deps`, `injection`, `auth`, `config`. Defaults: $2 budget, 5-minute timeout.
-
-### 12. Check Status
+### status — Check progress
 
 ```bash
 ./devshop status my-app
 ```
 
-### Interactive Session Commands
+Shows roadmap progress, completed/pending/parked items, and latest session summary.
 
-During `kickoff`, `plan`, `talk`, and `pair` sessions, these commands are available:
+## Typical Workflow
 
-| Command | Description |
-|---|---|
-| `go` | (kickoff only) Tell Riley to create specs and roadmap |
-| `push` | Commit and push changes to GitHub (creates a PR and auto-merges) |
-| `done` | Save session and exit (auto-pushes uncommitted changes) |
-
-### Typical Workflow
-
-1. **`./devshop kickoff my-app`** (add `--design` for frontend projects) — scaffold the repo, chat with Riley, type `go` to create specs, type `push` to commit
-2. **`./devshop plan my-app`** — refine specs if needed, type `push` when ready
-3. **`./devshop action my-app`** — resolve any `[HUMAN]` items (API keys, etc.)
-4. **`./devshop run my-app`** — agents build from the specs in parallel
-5. **`./devshop report my-app`** — while the orchestrator runs, queue bugs or feature requests
-6. **`./devshop pair my-app`** — debug any issues with Morgan
-7. **`./devshop schedule install my-app`** — arm the scheduler for autonomous daily cycles
+1. `./devshop kickoff my-app` — scaffold, chat with Riley, type `go`
+2. `./devshop run my-app` — Morgan builds from the roadmap
+3. `./devshop talk my-app` — refine specs or roadmap if needed
+4. `./devshop pair my-app` — debug issues with Morgan
+5. `./devshop run my-app --resume` — continue building
 
 ## Testing
 
@@ -314,89 +115,73 @@ cd platform/orchestrator
 npm test
 ```
 
-A pre-commit hook automatically runs the orchestrator tests when files under `platform/orchestrator/` are modified. Tests also run in CI via GitHub Actions on every push and pull request.
+Tests run automatically via pre-commit hook and GitHub Actions CI.
 
-## Consumption Monitoring
+## Advanced Features
 
-The orchestrator tracks cost, time, and invocation count as a **fuel gauge**. Before each item and between phases, it checks whether to continue or shut down gracefully. This prevents mid-operation crashes from account limits.
+### Scheduling
 
-Defaults: $30/session budget, 7-hour time limit, 50 max agent invocations, warning at 80%.
-
-## Graceful Pause
-
-Press **Ctrl+C** during a running session to request a graceful pause. The orchestrator finishes its current work item, pushes to GitHub, writes the session summary, then stops. Press Ctrl+C a second time to force-exit immediately.
-
-Sessions stopped via pause can be resumed with `--resume`.
-
-## Triage Classification
-
-When a phase completes with failed (parked) items, a lightweight triage agent (Drew) classifies each as **BLOCKING** or **NON_BLOCKING** for dependent phases. This prevents the orchestrator from wasting budget on agents that will inevitably fail because their dependencies are missing.
-
-- Infrastructure, schema, and auth failures → blocking
-- Cosmetic, docs, and isolated feature failures → non-blocking
-- `[HUMAN]` tagged items → auto-parked as non-blocking (never sent to agents)
-- Fail-safe: if triage fails, all items treated as blocking
-
-Incomplete `[HUMAN]` items are surfaced at session end in an "Action Required" console section and included as a `humanItems` array in the summary JSON, so users always know what manual work remains.
-
-## Runtime Intervention Discovery
-
-When agents encounter errors that require human action (not code bugs), d3vsh0p automatically:
-
-1. **Classifies** the error using zero-cost pattern matching — distinguishes "missing API key" from "SyntaxError"
-2. **Generates instructions** — step-by-step actionable guidance with verify commands
-3. **Annotates the roadmap** — adds `[HUMAN]` marker to the parked item
-4. **Writes a sidecar file** — `openspec/interventions.json` persists across sessions
-5. **Surfaces at session end** — console output shows exactly what to do, not just "Parked: 3"
-
-Categories detected: credentials/API keys, permissions, database setup, code signing (iOS/Android), toolchain, simulator/device, dependencies. Mobile-specific patterns only activate when `ios/` or `android/` directories exist.
-
-Run `./devshop action <project>` to walk through interventions interactively. Resolved interventions are automatically retried on `--resume`.
-
-## Project Health Check
-
-On fresh sessions (`--fresh` or first run), the orchestrator runs a **health check gate** before dispatching agents. This catches pre-existing test failures, broken builds, or missing dependencies — problems that would otherwise cause every agent to fail in a loop.
-
-### How It Works
-
-1. **Auto-detection** — reads `package.json` and auto-detects `npm test` and `npm run build` if those scripts exist
-2. **Configurable** — override with explicit commands via project config (supports any test runner: Jest, Vitest, pytest, cargo test, etc.)
-3. **Morgan repair** — if the health check fails, Morgan (principal engineer) is spawned to diagnose and fix the root causes
-4. **Pair-mode fallback** — if Morgan can't fix it, the user drops into pair mode to fix it together
-5. **Verification** — health check is re-run after each repair attempt; session only proceeds if all commands pass
-
-### Configuration
-
-In the project's `orchestrator/config.json` (inside `active-agents/<project-id>/`):
-
-```json
-{
-  "healthCheck": {
-    "commands": ["npm test", "npm run build"],
-    "timeoutMs": 120000
-  }
-}
+```bash
+./devshop schedule install my-app    # Set up automated daily runs via launchd/cron
+./devshop schedule status my-app     # Show schedule status
+./devshop schedule pause my-app      # Pause scheduled runs
+./devshop schedule resume my-app     # Resume scheduled runs
+./devshop schedule remove my-app     # Remove the schedule
 ```
 
-- `commands` — array of shell commands to run. If empty or omitted, auto-detection is used.
-- `timeoutMs` — per-command timeout in milliseconds (default: 120000 / 2 minutes)
+When scheduled, Morgan runs autonomously in time windows (morning, afternoon, evening, night) with per-window budget and time limits.
 
-### State Flow
+### Design Skills
 
-```
-SELECTING_REQUIREMENT
-  ├── (health check passes) → continue to phases
-  └── (health check fails) → PROJECT_REPAIR
-                                ├── Morgan fixes → SELECTING_REQUIREMENT
-                                └── Morgan fails → pair mode
-                                                    ├── user fixes → SELECTING_REQUIREMENT
-                                                    └── still failing → SESSION_COMPLETE
+Use `--design` on kickoff to install [Impeccable](https://github.com/pbakaus/impeccable) design skills. Morgan runs `/impeccable polish` on UI files and `/impeccable audit` before committing.
+
+### Action Items
+
+```bash
+./devshop action my-app
 ```
 
-Skipped on `--resume` sessions (the health check already ran when the session was first created).
+Walk through `[HUMAN]`-tagged roadmap items that need manual intervention (API keys, service setup, etc.). d3vsh0p auto-discovers these when Morgan encounters errors requiring human action.
+
+### Security Scanning
+
+```bash
+./devshop security my-app
+```
+
+Standalone security audit via Casey (security agent). Findings written to `openspec/scans/`.
+
+### Recovery
+
+```bash
+./devshop recover my-app
+```
+
+Clean up orphaned worktrees and stale branches after crashes. Also runs automatically at session start.
+
+### Maintenance Cadences
+
+```bash
+./devshop cadence run my-app --type weekly     # Branch cleanup
+./devshop cadence run my-app --type monthly    # Archive parked items, cost review
+```
+
+### Bug Reports
+
+```bash
+./devshop report my-app
+```
+
+Queue bug reports or feature requests while Morgan is working. Processed between phases.
+
+### Project Health Check
+
+On fresh sessions, Morgan runs a health check gate (tests + build) before starting work. If the check fails, Morgan attempts repair automatically. If that fails, you drop into pair mode to fix it together.
+
+### Budget & Time Limits
+
+Default: $30/session, 7-hour time limit. Morgan self-regulates and the orchestrator enforces a hard timeout. Press Ctrl+C for graceful pause — Morgan finishes current work, commits, and stops.
 
 ## Security & Trust Model
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting and the full trust model.
-
-**Key points:** d3vsh0p is a local development tool. Orchestrator agents run with `bypassPermissions` — they have full tool access within project directories. All agent work is reviewed by the principal engineer (Morgan) before merge. Projects live in isolated repositories outside d3vsh0p. The PM agent's writes are sandboxed via SDK hooks.
+See [SECURITY.md](SECURITY.md) for the full trust model. d3vsh0p is a local development tool. Agents run with full tool access within project directories. Projects live in isolated repositories outside d3vsh0p.
