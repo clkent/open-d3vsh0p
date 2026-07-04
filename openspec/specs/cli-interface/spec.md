@@ -61,39 +61,47 @@ The system SHALL parse CLI options using `node:util` `parseArgs` with the follow
 - **THEN** config.resume SHALL be true
 
 ### Run Command
-The system SHALL require `roadmap.md` in the project's openspec directory and use ParallelOrchestrator. If no roadmap exists, it SHALL exit with an error directing the user to run `devshop kickoff` first. The command SHALL print a session header (project name, directory, budget, time limit) and a session summary (stop reason, completed/parked/remaining counts, total cost, branch, log file). The exit code SHALL be 1 if any requirements were parked, 0 otherwise.
+The system SHALL spawn Morgan (Principal Engineer) as a persistent Claude Code CLI session when the `run` command is executed. The run command SHALL manage the session lifecycle: acquire run lock, create session branch, render and pass the orchestration prompt, spawn Morgan CLI, and consolidate to main after Morgan exits.
 
-#### Scenario: Parallel mode detection
+If no roadmap exists, the system SHALL exit with an error directing the user to run `devshop kickoff` first.
+
+The command SHALL print a session header (project name, directory, budget, time limit) before spawning Morgan.
+
+After Morgan exits, the command SHALL consolidate the session branch to main via PR if any items were completed (detected by comparing roadmap state before and after the session).
+
+The exit code SHALL be 0 if Morgan exited normally, 1 if the session was terminated by timeout.
+
+#### Scenario: Run spawns Morgan CLI
 - **WHEN** `run` is executed and `roadmap.md` exists in the project directory
-- **THEN** the system SHALL print `Mode: parallel` and instantiate ParallelOrchestrator
+- **THEN** the system SHALL render the orchestration prompt, spawn `claude` CLI with `--append-system-prompt`, and wait for Morgan to exit
 
-#### Scenario: Sequential mode detection
+#### Scenario: No roadmap exits with error
 - **WHEN** `run` is executed and no `roadmap.md` exists
-- **THEN** the system SHALL print `Mode: sequential` and instantiate Orchestrator
+- **THEN** the system SHALL print an error directing the user to run `devshop kickoff` first and exit with code 1
 
 #### Scenario: Session header output
 - **WHEN** `run` is executed
-- **THEN** the system SHALL print a header block with Project (name and id), Directory, Mode, Budget (formatted to 2 decimal places), and Time limit (formatted in hours to 1 decimal place)
+- **THEN** the system SHALL print a header block with Project (name and id), Directory, Budget, and Time limit before spawning Morgan
 
-#### Scenario: Resume flag displayed
-- **WHEN** `run` is executed with `--resume`
-- **THEN** the session header SHALL include `Resume: yes`
+#### Scenario: Resume flag passes to Morgan
+- **WHEN** `run` is executed with `--resume` and a saved session ID exists
+- **THEN** the system SHALL pass `--resume {sessionId}` to the `claude` CLI instead of `--append-system-prompt`
 
-#### Scenario: Targeted requirements displayed
-- **WHEN** `run` is executed with `--requirements "user-auth,payment"`
-- **THEN** the session header SHALL include `Targets: user-auth, payment`
+#### Scenario: Time limit enforcement
+- **WHEN** the configured `timeLimitMs` elapses during Morgan's session
+- **THEN** the system SHALL terminate the `claude` CLI process
 
-#### Scenario: Exit code 1 for parked items
-- **WHEN** the orchestrator run completes with one or more parked requirements
-- **THEN** the run command SHALL return exit code 1
-
-#### Scenario: Exit code 0 for full completion
-- **WHEN** the orchestrator run completes with no parked requirements
-- **THEN** the run command SHALL return exit code 0
+#### Scenario: Post-session consolidation
+- **WHEN** Morgan's CLI session exits and the roadmap has newly completed items compared to pre-session state
+- **THEN** the system SHALL push the session branch, create a PR, wait for CI, and merge to main
 
 #### Scenario: Registry updated after run
 - **WHEN** the run command completes
 - **THEN** it SHALL update `project.lastSessionId` in the registry and call `saveRegistry`
+
+#### Scenario: Window flag enables autonomous mode
+- **WHEN** `run` is executed with `--window morning`
+- **THEN** the system SHALL include autonomous mode instructions in Morgan's prompt, telling Morgan to work without waiting for user input
 
 ### Status Command
 The system SHALL display project status including roadmap progress, active session state, and the latest session summary. It SHALL always return exit code 0.

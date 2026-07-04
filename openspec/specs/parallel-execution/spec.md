@@ -64,23 +64,24 @@ Implicit dependencies SHALL be set automatically: each phase after the first SHA
 - **THEN** that phase SHALL be considered ready and returned as the next phase
 
 ### Group Concurrency
-The system SHALL execute all pending groups within a phase concurrently using `Promise.allSettled()`.
+The system SHALL support two modes of group concurrency within a phase:
 
-Each group SHALL be assigned a persona from the AgentPool via `assignMany()`.
+1. **Morgan-delegated**: Morgan spawns sub-agents via the Claude Code Agent tool with `isolation: "worktree"` for each independent group. Morgan writes targeted briefs and reviews output before marking items complete.
+2. **Direct execution**: Morgan implements group items sequentially when parallelism is unnecessary (single group or simple items).
 
-Group results SHALL be logged individually regardless of success or failure (since `allSettled` captures both).
+Morgan SHALL decide which mode to use based on the phase structure and item complexity.
 
-#### Scenario: Two groups execute in parallel
-- **WHEN** a phase has Group A and Group B both with pending items
-- **THEN** the system SHALL call `Promise.allSettled([_executeGroup(A), _executeGroup(B)])` so both run concurrently
+#### Scenario: Morgan delegates multiple groups
+- **WHEN** Morgan encounters a phase with Group A and Group B, both with pending items, and determines parallelism is beneficial
+- **THEN** Morgan SHALL spawn sub-agents via the Agent tool with worktree isolation, providing each with a scoped implementation brief
 
-#### Scenario: One group fails, other succeeds
-- **WHEN** Group A's promise rejects and Group B's promise resolves
-- **THEN** the system SHALL log an error for Group A and a success for Group B, without aborting the phase
+#### Scenario: Morgan works sequentially
+- **WHEN** Morgan encounters a phase with a single group or determines the items are simple
+- **THEN** Morgan SHALL implement the items directly without spawning sub-agents
 
-#### Scenario: No pending groups in phase
-- **WHEN** `getPendingGroups(phase)` returns an empty array
-- **THEN** `_executePhase` SHALL return immediately without spawning any agents
+#### Scenario: Sub-agent output reviewed by Morgan
+- **WHEN** a sub-agent completes its delegated work
+- **THEN** Morgan SHALL review the changes for consistency with the broader codebase before accepting them
 
 ### Git Worktrees per Group
 The system SHALL create a dedicated git worktree for each concurrent group at `{projectDir}/.worktrees/group-{letter}`.
@@ -88,6 +89,12 @@ The system SHALL create a dedicated git worktree for each concurrent group at `{
 Each worktree SHALL be created with a new branch `devshop/worktree-{sessionId}/group-{letter}` based on the session branch.
 
 Worktrees SHALL be cleaned up (removed with `--force`) in a finally block after all items in the group are processed.
+
+When Morgan delegates to sub-agents, worktree isolation SHALL be handled by the Claude Code Agent tool's `isolation: "worktree"` parameter rather than the orchestrator's git-ops module.
+
+#### Scenario: Sub-agent worktree via Agent tool
+- **WHEN** Morgan spawns a sub-agent with `isolation: "worktree"`
+- **THEN** the Agent tool SHALL create a temporary git worktree for the sub-agent, and clean it up when the sub-agent completes
 
 #### Scenario: Worktree creation for group
 - **WHEN** `_executeGroup` starts for Group A
@@ -127,11 +134,17 @@ The `withLock(fn)` method SHALL automatically release the lock when the function
 ### Roadmap Status Updates
 The system SHALL update the roadmap.md file in-place to reflect item completion or parking.
 
-The `markItemComplete(id)` method SHALL change the checkbox marker from any state to `[x]` for the matching requirement ID.
+Morgan SHALL edit roadmap.md directly to mark items complete by changing `[ ]` to `[x]` after implementing each item and verifying tests pass.
+
+The `markItemComplete(id)` method SHALL remain available for programmatic use by the run lifecycle wrapper.
 
 The `markItemParked(id)` method SHALL change the checkbox marker from any state to `[!]` for the matching requirement ID.
 
-#### Scenario: Mark item complete
+#### Scenario: Morgan marks item complete directly
+- **WHEN** Morgan finishes a roadmap item and tests pass
+- **THEN** Morgan SHALL edit roadmap.md to change `- [ ] \`item-id\`` to `- [x] \`item-id\`` and commit the change
+
+#### Scenario: Mark item complete programmatically
 - **WHEN** `markItemComplete('user-auth')` is called and the roadmap contains `- [ ] \`user-auth\` -- Description`
 - **THEN** the file SHALL be rewritten with `- [x] \`user-auth\` -- Description`
 
