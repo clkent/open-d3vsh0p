@@ -32,7 +32,7 @@ Every source file in `platform/orchestrator/src/` SHALL have a corresponding `.t
 - **THEN** each SHALL have a corresponding `.test.js` file
 
 #### Scenario: P4 — Remaining modules
-- **GIVEN** the remaining untested files: `github-notifier.js`, `tech-debt-runner.js`
+- **GIVEN** the remaining untested files: `github-notifier.js`
 - **WHEN** test coverage is assessed
 - **THEN** each SHALL have a corresponding `.test.js` file
 

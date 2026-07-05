@@ -20,7 +20,7 @@ platform/orchestrator/          — The brain. Node.js orchestrator that drives 
   src/git/                      — Git operations, merge, consolidation
   src/quality/                  — Health checks, review parsing
   src/roadmap/                  — Roadmap reader/writer, format checkers, OpenSpec reader
-  src/runners/                  — Security scanning, tech debt, scaffolding, GitHub digests
+  src/runners/                  — Security scanning, scaffolding, GitHub digests
   src/session/                  — Session utils, path utils, token estimator (stub)
   src/scheduler/                — launchd/cron integration for automated runs
 

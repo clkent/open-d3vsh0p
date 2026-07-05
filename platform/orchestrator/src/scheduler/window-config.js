@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const SCHEDULE_DEFAULTS_PATH = path.join(__dirname, '..', '..', 'config', 'schedule-defaults.json');
-const VALID_WINDOWS = ['night', 'morning', 'day', 'techdebt'];
+const VALID_WINDOWS = ['night', 'morning', 'day'];
 
 async function loadScheduleDefaults() {
   const raw = await fs.readFile(SCHEDULE_DEFAULTS_PATH, 'utf-8');

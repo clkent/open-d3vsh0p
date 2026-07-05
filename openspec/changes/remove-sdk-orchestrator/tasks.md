@@ -54,8 +54,14 @@
 - [x] 8.4 Tests for runHealthCheckReport and didSessionChangeProject
 - [x] 8.5 Update project-health-check + git-workflow specs and README
 
-## 9. Verification
+## 9. Tech Debt Runner Removal (follow-up pass)
 
-- [x] 9.1 npm test green in orchestrator + pm packages
-- [x] 9.2 Grep sweeps: no dangling references to deleted modules
-- [x] 9.3 Smoke: devshop help, syntax checks, defaults.json parses
+- [x] 9.1 Delete runners/tech-debt-runner.js (+ test) and tech-debt-prompt.md template
+- [x] 9.2 Remove handleTechDebt + techdebt branch from run.js; drop 'techdebt' from VALID_WINDOWS and schedule-defaults.json
+- [x] 9.3 Update specs (daily-scheduling, security-scan, agent-templates, test-coverage-integrity), README, llms.txt, help text; annotate roadmap
+
+## 10. Verification
+
+- [x] 10.1 npm test green in orchestrator + pm packages
+- [x] 10.2 Grep sweeps: no dangling references to deleted modules
+- [x] 10.3 Smoke: devshop help, syntax checks, defaults.json parses

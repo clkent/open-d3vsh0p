@@ -47,7 +47,7 @@
 ### Group B: Daily Scheduling
 - [x] `schedule-config` — Per-project schedule schema in registry, window-config validation
 - [x] `window-aware-run` — --window flag, budget/time overrides, window-end graceful shutdown
-- [x] `tech-debt-runner` — Security scan + PE improvement pass for techdebt window
+- [x] `tech-debt-runner` — Security scan + PE improvement pass for techdebt window *(removed: remove-sdk-orchestrator — use `devshop security --schedule weekly` instead)*
 - [x] `launchd-integration` — Plist generation, install/remove via launchctl, cron fallback
 - [x] `schedule-cli` — schedule install/remove/status/dry-run commands
 - [x] `github-daily-digest` — Rolling daily Issue per project via gh CLI *(morning digest now posts a roadmap snapshot)*

@@ -37,11 +37,6 @@ async function runCommand(project, config, registry, saveRegistry) {
       return await handleMorningDigest(project, config);
     }
 
-    // Tech debt window runs security + PE instead of normal run
-    if (windowName === 'techdebt') {
-      return await handleTechDebt(project, config);
-    }
-
     // Apply window budget/time unless CLI explicitly overrode
     const cliUsedDefaultBudget = config.budgetLimitUsd === 30;
     const cliUsedDefaultTime = config.timeLimitMs === 7 * 3600000;
@@ -392,48 +387,6 @@ async function handleMorningDigest(project, config) {
   }
 
   return 0;
-}
-
-async function handleTechDebt(project, config) {
-  const lockPath = path.join(config.activeAgentsDir, 'orchestrator', LOCK_FILE_NAME);
-  const lockAcquired = await acquireRunLock(lockPath);
-  if (!lockAcquired) {
-    console.error('Another run is already in progress for this project.');
-    return 1;
-  }
-
-  try {
-    const { TechDebtRunner } = require('../runners/tech-debt-runner');
-    const fullConfig = await loadConfig(config);
-    const runner = new TechDebtRunner({ ...fullConfig, ...config });
-    const result = await runner.run();
-
-    const { GitHubNotifier } = require('../runners/github-notifier');
-    const notifier = new GitHubNotifier(project.projectDir, project.name);
-
-    const digestSummary = {
-      sessionId: generateSessionId('techdebt'),
-      window: 'techdebt',
-      totalCostUsd: result.totalCost,
-      agentInvocations: 2,
-      results: {
-        completed: [],
-        parked: [],
-        remaining: []
-      },
-      stopReason: 'tech_debt_complete'
-    };
-
-    if (result.securityResult?.output) {
-      digestSummary.securityFindings = result.securityResult.output.substring(0, 2000);
-    }
-
-    await notifier.postDailyDigest(digestSummary);
-
-    return 0;
-  } finally {
-    await releaseRunLock(lockPath);
-  }
 }
 
 async function postRunDigest(project, config, result, windowName) {

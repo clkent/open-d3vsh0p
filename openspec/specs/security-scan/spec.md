@@ -57,12 +57,8 @@ After writing the scan report, the system SHALL print a summary of findings to s
 - **WHEN** a security scan completes with no findings
 - **THEN** stdout displays "No security issues found" and the report file path
 
-### Requirement: SecurityRunner extracts from TechDebtRunner
-The security scan logic SHALL be implemented in a standalone `SecurityRunner` class. `TechDebtRunner._runSecurityScan()` SHALL delegate to `SecurityRunner.run()` to eliminate duplication. The `SecurityRunner.run()` return value SHALL match the existing shape: `{ success, output, cost, error }`.
-
-#### Scenario: TechDebtRunner delegates to SecurityRunner
-- **WHEN** `TechDebtRunner.run()` executes its security scan phase
-- **THEN** it invokes `SecurityRunner.run()` and receives `{ success, output, cost, error }`
+### Requirement: Standalone SecurityRunner
+The security scan logic SHALL be implemented in a standalone `SecurityRunner` class. The `SecurityRunner.run()` return value SHALL have the shape: `{ success, output, cost, error }`.
 
 #### Scenario: Standalone invocation
 - **WHEN** `SecurityRunner.run()` is called directly by the security command

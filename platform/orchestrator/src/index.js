@@ -229,7 +229,7 @@ Options:
   --resume                 Resume a previously interrupted session
   --fresh                  Start a fresh session (ignore saved state)
   --requirements <ids>     Comma-separated requirement IDs to work on
-  --window <name>          Run in a specific time window (night/morning/day/techdebt)
+  --window <name>          Run in a specific time window (night/morning/day)
   --type <type>            Cadence type for cadence run (weekly/monthly)
   --dry-run                Preview without making changes
   --no-consolidate         Skip auto-consolidation of session branch to main

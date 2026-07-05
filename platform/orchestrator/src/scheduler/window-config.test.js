@@ -5,7 +5,7 @@ const { validateScheduleConfig, getWindowConfig, getEnabledWindows, VALID_WINDOW
 describe('window-config', () => {
   describe('VALID_WINDOWS', () => {
     it('contains expected window names', () => {
-      assert.deepEqual(VALID_WINDOWS, ['night', 'morning', 'day', 'techdebt']);
+      assert.deepEqual(VALID_WINDOWS, ['night', 'morning', 'day']);
     });
   });
 

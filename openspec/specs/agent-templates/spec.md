@@ -10,7 +10,6 @@ IMPLEMENTED
 - `templates/agents/principal-engineer/system-prompt.md` -- Morgan review persona prompt
 - `templates/agents/principal-engineer/run-prompt.md` -- Morgan's orchestration prompt for run sessions
 - `templates/agents/principal-engineer/pair-prompt.md` -- Morgan's pair session prompt
-- `templates/agents/principal-engineer/tech-debt-prompt.md` -- Morgan's tech-debt cadence prompt
 - `templates/agents/security-agent/system-prompt.md` -- Casey persona prompt
 - `templates/agents/pm-agent/system-prompt.md` -- Riley standard PM prompt
 - `templates/agents/pm-agent/brain-dump-prompt.md` -- Riley brain dump session prompt
@@ -37,7 +36,7 @@ The system SHALL organize agent templates such that each agent type has its own 
 - **THEN** it SHALL return an empty object `{}` without throwing
 
 ### Principal Engineer (Morgan)
-The system SHALL provide a principal engineer template named Morgan. Morgan's `system-prompt.md` SHALL define a review-focused persona with a structured JSON response format: a `decision` of exactly APPROVE or REQUEST_CHANGES, dimensional scores (1-5) for spec_adherence, test_coverage, code_quality, security, simplicity, and implementation_authenticity, a summary, and issues with `critical`/`major`/`minor` severities. Additional Morgan prompts SHALL cover run orchestration (`run-prompt.md`), pair sessions (`pair-prompt.md`), and tech-debt cadences (`tech-debt-prompt.md`).
+The system SHALL provide a principal engineer template named Morgan. Morgan's `system-prompt.md` SHALL define a review-focused persona with a structured JSON response format: a `decision` of exactly APPROVE or REQUEST_CHANGES, dimensional scores (1-5) for spec_adherence, test_coverage, code_quality, security, simplicity, and implementation_authenticity, a summary, and issues with `critical`/`major`/`minor` severities. Additional Morgan prompts SHALL cover run orchestration (`run-prompt.md`) and pair sessions (`pair-prompt.md`).
 
 #### Scenario: Morgan review scoring dimensions
 - **WHEN** the principal-engineer system prompt is rendered

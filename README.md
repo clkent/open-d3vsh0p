@@ -129,7 +129,7 @@ Tests run automatically via pre-commit hook and GitHub Actions CI.
 ./devshop schedule remove my-app     # Remove the schedule
 ```
 
-When scheduled, Morgan runs autonomously in time windows (night, morning, day, techdebt) with per-window budget and time limits.
+When scheduled, Morgan runs autonomously in time windows (night, morning, day) with per-window budget and time limits.
 
 ### Design Skills
 

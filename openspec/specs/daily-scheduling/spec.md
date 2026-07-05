@@ -78,22 +78,6 @@ The system SHALL support autonomous microcycles during the day window (default 1
 - **WHEN** the day window run is invoked with `--requirements <ids>`
 - **THEN** the orchestrator SHALL prioritize those specific requirements
 
-### Tech Debt Window
-
-The system SHALL run full codebase security scans and principal engineer improvement passes during the tech debt window (default 6pm-10pm).
-
-#### Scenario: Security scan runs first
-- **WHEN** the tech debt window begins
-- **THEN** the system SHALL spawn the security agent (Casey) to scan the entire project codebase for vulnerabilities
-
-#### Scenario: PE improvement pass follows security
-- **WHEN** the security scan completes within the tech debt window
-- **THEN** the system SHALL spawn the principal engineer agent (Morgan) with a tech-debt-specific prompt to address code quality, refactoring opportunities, and technical debt across the codebase
-
-#### Scenario: Tech debt results appended to daily digest
-- **WHEN** the tech debt window completes
-- **THEN** findings SHALL be appended as a comment on today's rolling daily digest Issue
-
 ### Window-Aware Run Command
 
 The `run` command SHALL accept a `--window` flag that configures budget, time limits, and behavior based on the named window.
