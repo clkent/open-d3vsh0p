@@ -22,7 +22,7 @@ Every source file in `platform/orchestrator/src/` SHALL have a corresponding `.t
 - **THEN** each command file SHALL have a corresponding `.test.js` file (e.g., `run.test.js`, `kickoff.test.js`, `pair.test.js`, `security.test.js`)
 
 #### Scenario: P2 — Core utilities
-- **GIVEN** the core utility files: `exec-utils.js`, `logger.js`, `health-checker.js`, `registry.js`, `session-utils.js`, `session-aggregator.js`, `path-utils.js`
+- **GIVEN** the core utility files: `exec-utils.js`, `logger.js`, `health-checker.js`, `registry.js`, `session-utils.js`, `path-utils.js`
 - **WHEN** test coverage is assessed
 - **THEN** each SHALL have a corresponding `.test.js` file testing all exported functions/methods
 

@@ -37,8 +37,17 @@
 - [x] 5.4 Fix pair.js to pass project config to health checks (was passing {})
 - [x] 5.5 Update affected specs (git-workflow, logging-observability, parallel-execution, spike-phases, agent-management, design-aware-agents, codebase-gotchas, rest-api, human-prerequisite-blocking) and roadmap annotation
 
-## 6. Verification
+## 7. Estimator Removal (follow-up pass)
 
-- [x] 6.1 npm test green in orchestrator + pm packages
-- [x] 6.2 Grep sweeps: no dangling references to deleted modules
-- [x] 6.3 Smoke: devshop help, syntax checks, defaults.json parses
+- [x] 7.1 Delete session/cost-estimator.js and api/session-aggregator.js (+ tests) — summary files they read are no longer generated
+- [x] 7.2 Remove cost-estimate displays from run and status; remove status last-session summary display
+- [x] 7.3 Morning digest rebuilt from roadmap snapshot (no summary dependency)
+- [x] 7.4 Disable monthly cadence review with notice; remove postMonthlyReport from github-notifier
+- [x] 7.5 Stub session/token-estimator.js for the future token-based estimator; add pending roadmap item + project.md requirement
+- [x] 7.6 Update specs: cadence-automation, daily-scheduling, cli-interface; annotate roadmap
+
+## 8. Verification
+
+- [x] 8.1 npm test green in orchestrator + pm packages
+- [x] 8.2 Grep sweeps: no dangling references to deleted modules
+- [x] 8.3 Smoke: devshop help, syntax checks, defaults.json parses

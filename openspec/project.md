@@ -52,3 +52,10 @@ _Only pending (unimplemented) requirements are listed here. See `openspec/specs/
 
 - HTTP endpoints for project management, session control, status queries
 - Authentication and authorization for API access
+
+### Token Estimation
+
+- Token-based session estimator replacing the removed dollar-based CostEstimator (stub at `platform/orchestrator/src/session/token-estimator.js`)
+- Estimates in tokens, not dollars — clearer and model-price independent
+- Data source: Claude Code session usage/transcripts (orchestrator-written summaries no longer exist)
+- Re-enables: pre-run estimate in `run`, remaining-work estimate in `status`, and the disabled monthly cadence review

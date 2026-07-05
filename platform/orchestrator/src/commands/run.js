@@ -5,9 +5,7 @@ const { RoadmapReader } = require('../roadmap/roadmap-reader');
 const { GitOps } = require('../git/git-ops');
 const { TemplateEngine } = require('../agents/template-engine');
 const { resolveScheduleConfig, getWindowConfig, computeWindowEndTimeMs, VALID_WINDOWS } = require('../scheduler/window-config');
-const { CostEstimator } = require('../session/cost-estimator');
 const { generateSessionId } = require('../session/session-utils');
-const { getOrchestratorPaths } = require('../session/path-utils');
 const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
 const { loadConfig } = require('../infra/config');
 
@@ -114,26 +112,6 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   }
   if (config.resume) {
     console.log(`  Resume:     yes`);
-  }
-
-  // Show estimated cost from historical data
-  try {
-    const { logsDir } = getOrchestratorPaths(config);
-    const costEstimator = new CostEstimator(logsDir);
-    await costEstimator.init();
-
-    if (costEstimator.sessionCount >= 1) {
-      const roadmap = await roadmapReader.parse();
-      const pendingCount = roadmapReader.getAllItems(roadmap)
-        .filter(i => i.status === 'pending').length;
-
-      if (pendingCount > 0) {
-        const prediction = costEstimator.predictSufficiency(budgetUsd, pendingCount);
-        console.log(`  Estimate:   $${prediction.estimatedCost.toFixed(2)} (${pendingCount} pending, confidence: ${prediction.confidence})`);
-      }
-    }
-  } catch {
-    // Non-fatal — skip estimate display
   }
 
   console.log('=====================================');
@@ -348,19 +326,30 @@ async function handleMorningDigest(project, config) {
   console.log('======================');
   console.log('');
 
-  const { SessionAggregator } = require('../api/session-aggregator');
   const { GitHubNotifier } = require('../runners/github-notifier');
 
-  const { logsDir: logDir } = getOrchestratorPaths(config);
-  const aggregator = new SessionAggregator(logDir);
-  const summary = await aggregator.getMostRecentSummary();
-
-  if (!summary) {
-    console.log('  No recent session found for digest.');
+  // Build the digest from the current roadmap state (session summaries are
+  // no longer generated — Morgan's CLI sessions produce commits, not summaries)
+  const roadmapReader = new RoadmapReader(config.projectDir);
+  if (!(await roadmapReader.exists())) {
+    console.log('  No roadmap found for digest.');
     return 0;
   }
 
-  summary.window = 'morning-digest';
+  const roadmap = await roadmapReader.parse();
+  const items = roadmapReader.getAllItems(roadmap);
+  const summary = {
+    sessionId: generateSessionId('digest'),
+    window: 'morning-digest',
+    totalCostUsd: 0,
+    agentInvocations: 0,
+    results: {
+      completed: items.filter(i => i.status === 'complete').map(i => i.id),
+      parked: items.filter(i => i.status === 'parked').map(i => i.id),
+      remaining: items.filter(i => i.status === 'pending').map(i => i.id)
+    },
+    stopReason: 'morning_digest'
+  };
 
   const notifier = new GitHubNotifier(project.projectDir, project.name);
   const issueNumber = await notifier.postDailyDigest(summary);

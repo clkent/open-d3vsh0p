@@ -9,7 +9,7 @@ IMPLEMENTED
 ## Source Files
 - `platform/orchestrator/src/index.js` -- main CLI entry point with argument parsing, project resolution, and command dispatch
 - `platform/orchestrator/src/commands/run.js` -- run command handler that spawns Morgan as a Claude Code CLI session
-- `platform/orchestrator/src/commands/status.js` -- status command handler displaying roadmap, session, and summary information
+- `platform/orchestrator/src/commands/status.js` -- status command handler displaying roadmap and session information
 
 ## Requirements
 
@@ -103,7 +103,7 @@ The exit code SHALL be 0 if Morgan exited normally, 1 if the session was termina
 - **THEN** the system SHALL include autonomous mode instructions in Morgan's prompt, telling Morgan to work without waiting for user input
 
 ### Status Command
-The system SHALL display project status including roadmap progress, active session state, and the latest session summary. It SHALL always return exit code 0.
+The system SHALL display project status including roadmap progress and active session state. It SHALL always return exit code 0.
 
 #### Scenario: Roadmap progress display
 - **WHEN** `status` is executed and a roadmap.md exists
@@ -124,14 +124,6 @@ The system SHALL display project status including roadmap progress, active sessi
 #### Scenario: No active session
 - **WHEN** `status` is executed and no state.json exists
 - **THEN** the system SHALL display `Session: No active session`
-
-#### Scenario: Latest session summary display
-- **WHEN** `status` is executed and the logs directory contains summary files
-- **THEN** the system SHALL read the last (alphabetically sorted) `*-summary.json` file and display its session ID, cost, completed count, parked count, and remaining count
-
-#### Scenario: No logs directory
-- **WHEN** `status` is executed and no logs directory exists
-- **THEN** the system SHALL silently skip the latest session section without error
 
 ### Project Resolution
 The system SHALL resolve projects by looking up the `projectId` positional argument in `project-registry.json`. It SHALL validate that the project exists in the registry and that the project directory is accessible on disk.

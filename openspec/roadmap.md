@@ -50,11 +50,11 @@
 - [x] `tech-debt-runner` — Security scan + PE improvement pass for techdebt window
 - [x] `launchd-integration` — Plist generation, install/remove via launchctl, cron fallback
 - [x] `schedule-cli` — schedule install/remove/status/dry-run commands
-- [x] `github-daily-digest` — Rolling daily Issue per project via gh CLI
+- [x] `github-daily-digest` — Rolling daily Issue per project via gh CLI *(morning digest now posts a roadmap snapshot)*
 
 ### Group C: Cadence Automation
 - [x] `weekly-cleanup` — Stale branch pruning, dead worktree removal
-- [x] `monthly-review` — Archive old parked items, cost aggregation report
+- [x] `monthly-review` — Archive old parked items, cost aggregation report *(disabled: summary data source removed; returns with token-estimator)*
 - [x] `cadence-cli` — cadence run/status commands
 
 ## Phase V: Platform Quality
@@ -62,7 +62,7 @@
 
 ### Group A: Reliability
 - [x] `worktree-crash-recovery` — Detect and recover orphaned worktrees, stale branches, interrupted state
-- [x] `predictive-budget-modeling` — Cost estimation from session history, pre-phase budget checks
+- [x] `predictive-budget-modeling` — Cost estimation from session history, pre-phase budget checks *(removed: remove-sdk-orchestrator — to be replaced by token-estimator)*
 
 ### Group B: Observability
 - [x] `structured-review-scoring` — Dimensional review scores, ReviewParser, metrics in status output *(removed: remove-sdk-orchestrator)*
@@ -208,3 +208,7 @@
 
 ### Group A: Dead Code Removal
 - [x] `remove-sdk-orchestrator` — Remove the dead SDK orchestration engine (parallel-orchestrator, microcycle, agent pool, triage, health-gate machinery), the watch/broadcast and report features, and unused agent templates; re-home the health check as a pre-run preflight that injects failures into Morgan's prompt
+
+### Group B: Token Estimation
+<!-- depends: Phase XVII Group A -->
+- [ ] `token-estimator` — Replace the removed dollar-based cost estimator with a token-based estimator: clearer units, model-price independent, sourced from Claude Code session usage instead of orchestrator summaries; re-enables run/status estimates and the monthly review

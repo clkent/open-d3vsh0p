@@ -98,7 +98,7 @@ Interactive session with Morgan to diagnose and fix issues. Morgan has context a
 ./devshop status my-app
 ```
 
-Shows roadmap progress, completed/pending/parked items, and latest session summary.
+Shows roadmap progress, completed/pending/parked items, and active session state.
 
 ## Typical Workflow
 
@@ -163,7 +163,7 @@ Clean up orphaned worktrees and stale branches after crashes. Also runs automati
 
 ```bash
 ./devshop cadence run my-app --type weekly     # Branch cleanup
-./devshop cadence run my-app --type monthly    # Archive parked items, cost review
+./devshop cadence run my-app --type monthly    # Disabled pending token-based estimator
 ```
 
 ### Project Health Check

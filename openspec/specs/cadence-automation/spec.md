@@ -1,7 +1,7 @@
 # Cadence Automation
 
 ## Purpose
-Automate weekly and monthly maintenance cadences that keep the development environment healthy. Weekly tasks focus on stale branch cleanup and dead worktree removal. Monthly tasks focus on archiving old parked items and cost review from session summaries. Results are reported via GitHub Issues.
+Automate weekly maintenance cadences that keep the development environment healthy: stale branch cleanup and dead worktree removal, reported via GitHub Issues. The monthly review (parked-item archiving, cost review) is disabled — its data source (session summaries) is no longer generated; it will return with the token-based estimator.
 
 ## Status
 PLANNED
@@ -43,35 +43,13 @@ The system SHALL remove dead worktrees weekly.
 - **WHEN** the cleanup identifies worktrees
 - **THEN** it SHALL never remove worktrees that have an active process (check for run.lock)
 
-### Monthly Archive Parked Items
+### Monthly Review Disabled
 
-The system SHALL archive parked requirements that have been inactive for more than 30 days.
+The monthly review's former tasks (archiving stale parked items, cost aggregation) depended on session summaries, which are no longer generated. Until the token-based estimator (`session/token-estimator.js`, roadmap item `token-estimator`) provides a replacement data source, `cadence run --type monthly` SHALL print a notice that the monthly review is disabled and exit 0.
 
-#### Scenario: Old parked items archived
-- **WHEN** the monthly review runs
-- **THEN** the system SHALL scan session summaries to find requirements that were parked more than 30 days ago and have not been retried since
-- **AND** SHALL update the roadmap to mark them with `[-]` (archived) status
-
-#### Scenario: Active parked items preserved
-- **WHEN** a parked item was retried within the last 30 days
-- **THEN** it SHALL not be archived
-
-### Monthly Cost Review
-
-The system SHALL aggregate cost data from session summaries and produce a monthly cost report.
-
-#### Scenario: Cost aggregation from session summaries
-- **WHEN** the monthly cost review runs
-- **THEN** the system SHALL scan all `*-summary.json` files in `active-agents/<projectId>/orchestrator/logs/`
-- **AND** SHALL aggregate: total cost, cost per session, cost per completed requirement, and total agent invocations
-
-#### Scenario: Month-over-month comparison
-- **WHEN** cost data exists for the previous month
-- **THEN** the report SHALL include month-over-month cost change percentages
-
-#### Scenario: Cost anomaly flagging
-- **WHEN** a project's monthly cost has increased by more than 50% compared to the previous month
-- **THEN** the report SHALL flag it for human review with a breakdown of cost drivers
+#### Scenario: Monthly cadence prints disabled notice
+- **WHEN** `cadence run <project> --type monthly` is executed
+- **THEN** the system SHALL print that the monthly review is disabled pending the token-based estimator and SHALL exit 0 without posting a GitHub Issue
 
 ### Cadence CLI Command
 

@@ -21,7 +21,7 @@ platform/orchestrator/          — The brain. Node.js orchestrator that drives 
   src/quality/                  — Health checks, review parsing
   src/roadmap/                  — Roadmap reader/writer, format checkers, OpenSpec reader
   src/runners/                  — Security scanning, tech debt, scaffolding, GitHub digests
-  src/session/                  — Cost tracking, session utils, path utils
+  src/session/                  — Session utils, path utils, token estimator (stub)
   src/scheduler/                — launchd/cron integration for automated runs
 
 templates/agents/               — System prompt templates for each agent role

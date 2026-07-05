@@ -46,17 +46,21 @@ The system SHALL execute autonomous microcycles on pending requirements during t
 
 ### Morning Review Window
 
-The system SHALL produce a rolling daily GitHub Issue summarizing the night's work (default 8am-12pm).
+The system SHALL produce a rolling daily GitHub Issue with a snapshot of roadmap progress (default 8am-12pm). The digest is built from the current roadmap state — session summaries are no longer generated.
 
 #### Scenario: Rolling daily digest Issue created
-- **WHEN** the morning window triggers
+- **WHEN** the morning window triggers and a roadmap exists
 - **THEN** the system SHALL search for today's Issue by title `[DevShop Daily] <project name> - <YYYY-MM-DD>` via `gh issue list --search`
-- **AND** if found, append the night session summary as a new comment
-- **AND** if not found, create a new Issue with the night session summary
+- **AND** if found, append the roadmap snapshot as a new comment
+- **AND** if not found, create a new Issue with the roadmap snapshot
 
-#### Scenario: Digest includes session details
+#### Scenario: Digest includes roadmap snapshot
 - **WHEN** the daily digest is generated
-- **THEN** it SHALL include: completed requirements, parked items, cost totals, session branch name, and any warnings from consumption monitoring
+- **THEN** it SHALL include the roadmap's completed, parked, and remaining item IDs
+
+#### Scenario: No roadmap for digest
+- **WHEN** the morning window triggers and no roadmap.md exists
+- **THEN** the system SHALL print that no roadmap was found and exit 0 without posting
 
 #### Scenario: gh CLI unavailable
 - **WHEN** the `gh` CLI is not installed or not authenticated
