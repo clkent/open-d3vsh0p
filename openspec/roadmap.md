@@ -212,3 +212,7 @@
 ### Group B: Token Estimation
 <!-- depends: Phase XVII Group A -->
 - [ ] `token-estimator` — Replace the removed dollar-based cost estimator with a token-based estimator: clearer units, model-price independent, sourced from Claude Code session usage instead of orchestrator summaries; re-enables run/status estimates and the monthly review
+
+### Group C: Scheduling Validation
+<!-- depends: Phase XVII Group A -->
+- [ ] `scheduling-e2e-validation` — [HUMAN] Full end-to-end test of the never-yet-used scheduling subsystem: `schedule install` → launchd plist fires → headless `run --window night` (spawning the `claude` CLI without a TTY is the highest-risk unknown) → autonomous Morgan session → post-session health gate → consolidation → morning digest; plus pause/resume/remove lifecycle
