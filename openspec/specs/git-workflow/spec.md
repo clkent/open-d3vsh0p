@@ -1,42 +1,16 @@
 # Git Workflow
 
 ## Purpose
-Manages all git operations for the orchestrator, including session and work branch creation, commits, merges, diffs, worktree management, and consolidation of session branches to main.
+Manages git operations for the orchestrator: commits, worktree cleanup, pushing, and consolidation of session branches to main via PR.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/git/git-ops.js` — git command execution, branch management, commit/merge operations, diff retrieval, worktree lifecycle, and consolidation
+- `platform/orchestrator/src/git/git-ops.js` — git command execution, commits, pushing, worktree removal/listing, and consolidation
 - `platform/orchestrator/src/git/recovery-manager.js` — cleanup of orphaned worktrees, stale branches, and inconsistent state (used by the recover command)
 
 ## Requirements
-
-### Session Branches
-The system SHALL create session branches from main using the naming convention `devshop/session-{sessionId}`.
-
-The system SHALL checkout `main` before creating the session branch to ensure a clean base.
-
-#### Scenario: New session branch creation
-- **WHEN** `createSessionBranch(projectDir, 'devshop/session-2026-02-10-14-30')` is called
-- **THEN** the system SHALL run `git checkout main` followed by `git checkout -b devshop/session-2026-02-10-14-30` and log the branch creation
-
-#### Scenario: Session branch already exists
-- **WHEN** a session branch with the same name already exists in the repository
-- **THEN** the `git checkout -b` command SHALL fail and the error SHALL propagate with a message starting with "git checkout failed:"
-
-### Work Branches
-The system SHALL create work branches from the session branch using the naming convention `devshop/work-{sessionSuffix}/{requirementId}`.
-
-The session suffix SHALL be extracted by stripping the `devshop/session-` prefix from the session branch name.
-
-#### Scenario: Work branch creation
-- **WHEN** `createWorkBranch(projectDir, 'devshop/session-2026-02-10', 'user-auth')` is called
-- **THEN** the system SHALL checkout the session branch, then create `devshop/work-2026-02-10/user-auth` and return that branch name
-
-#### Scenario: Multiple work branches from same session
-- **WHEN** two work branches are created for requirements `user-auth` and `api-routes` from the same session
-- **THEN** the branches SHALL be `devshop/work-{suffix}/user-auth` and `devshop/work-{suffix}/api-routes`, both based on the session branch
 
 ### Commit All
 The system SHALL stage all changes and commit them atomically, returning the commit SHA or null if there are no changes.
@@ -55,48 +29,8 @@ The system SHALL check for changes using `git status --porcelain` before attempt
 - **WHEN** `hasChanges(projectDir)` is called
 - **THEN** the system SHALL return true if `git status --porcelain` output is non-empty, false otherwise
 
-### Merge Work to Session
-The system SHALL merge work branches into the session branch using `--no-ff` to preserve merge history.
-
-The merge commit message SHALL follow the format `merge: {requirementId}`.
-
-#### Scenario: Successful merge
-- **WHEN** `mergeWorkToSession(projectDir, sessionBranch, workBranch, requirementId)` is called
-- **THEN** the system SHALL checkout the session branch, run `git merge --no-ff {workBranch} -m "merge: {requirementId}"`, and log the merge
-
-#### Scenario: Merge to session with custom message
-- **WHEN** `mergeToSession(projectDir, sessionBranch, sourceBranch, commitMessage)` is called
-- **THEN** the system SHALL checkout the session branch and run `git merge --no-ff {sourceBranch} -m {commitMessage}`
-
-### Diff and Log Retrieval
-The system SHALL retrieve diffs and logs using three-dot syntax with a fallback to two-dot syntax.
-
-#### Scenario: Diff with common ancestor (three-dot)
-- **WHEN** `getDiff(projectDir, baseBranch)` is called and the branches share a common ancestor
-- **THEN** the system SHALL run `git diff {baseBranch}...HEAD` and return the stdout
-
-#### Scenario: Diff fallback (two-dot)
-- **WHEN** `getDiff(projectDir, baseBranch)` is called and the three-dot diff fails (no common ancestor)
-- **THEN** the system SHALL fall back to `git diff {baseBranch}` (two-dot syntax)
-
-#### Scenario: Diff stat retrieval
-- **WHEN** `getDiffStat(projectDir, baseBranch)` is called
-- **THEN** the system SHALL run `git diff --stat {baseBranch}...HEAD` and return the output, or return an empty string on failure
-
-#### Scenario: Log between branches
-- **WHEN** `getLog(projectDir, baseBranch)` is called
-- **THEN** the system SHALL run `git log --oneline {baseBranch}..HEAD` (two-dot) and return the output, or return an empty string on failure
-
 ### Worktree Support
-The system SHALL manage git worktrees, supporting creation, removal, and listing (used by recovery tooling and available to session workflows).
-
-#### Scenario: Create worktree from existing branch
-- **WHEN** `createWorktree(projectDir, worktreePath, branchName)` is called
-- **THEN** the system SHALL run `git worktree add {worktreePath} {branchName}` and log the creation
-
-#### Scenario: Create worktree with new branch
-- **WHEN** `createWorktreeWithNewBranch(projectDir, worktreePath, newBranch, sourceBranch)` is called
-- **THEN** the system SHALL run `git worktree add -b {newBranch} {worktreePath} {sourceBranch}` and log the creation with the source branch
+The system SHALL manage git worktrees, supporting removal and parsed listing (used by the recover command's cleanup of orphaned worktrees).
 
 #### Scenario: Remove worktree
 - **WHEN** `removeWorktree(projectDir, worktreePath)` is called
@@ -106,9 +40,9 @@ The system SHALL manage git worktrees, supporting creation, removal, and listing
 - **WHEN** `removeWorktree` is called and the worktree path no longer exists
 - **THEN** the system SHALL log a warning but SHALL NOT throw an error
 
-#### Scenario: List worktrees
-- **WHEN** `listWorktrees(projectDir)` is called
-- **THEN** the system SHALL run `git worktree list` and return the stdout
+#### Scenario: List worktrees (parsed)
+- **WHEN** `listWorktreesParsed(projectDir)` is called
+- **THEN** the system SHALL run `git worktree list --porcelain` and return structured entries (path, branch)
 
 ### Push to Remote
 The system SHALL support pushing branches to the remote origin via `pushBranch(projectDir, branchName)`.
@@ -181,14 +115,3 @@ Consolidation failure SHALL be non-fatal: the system SHALL log a warning with th
 #### Scenario: Consolidation skipped with --no-consolidate flag
 - **WHEN** the `--no-consolidate` CLI flag is set
 - **THEN** the system SHALL skip auto-consolidation and behave as before (push only)
-
-### Branch Existence Checking
-The system SHALL provide a non-throwing method to check whether a branch exists.
-
-#### Scenario: Branch exists
-- **WHEN** `branchExists(projectDir, 'main')` is called and the branch exists
-- **THEN** the system SHALL run `git rev-parse --verify main` and return true
-
-#### Scenario: Branch does not exist
-- **WHEN** `branchExists(projectDir, 'nonexistent-branch')` is called
-- **THEN** the system SHALL catch the rev-parse error and return false

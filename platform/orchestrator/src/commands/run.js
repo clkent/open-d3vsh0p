@@ -312,7 +312,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
       const currentBranch = branchName.trim();
 
       if (currentBranch && currentBranch !== 'main') {
-        const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+        const logger = { log: async () => {}, logCommit: async () => {} };
         const gitOps = new GitOps(logger);
         await gitOps.consolidateToMain(config.projectDir, currentBranch, {
           sessionId,
@@ -481,7 +481,7 @@ async function auditRoadmapCompletions(projectDir) {
   const reader = new RoadmapReader(projectDir);
   if (!await reader.exists()) return { reconciled: 0, items: [] };
 
-  const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+  const logger = { log: async () => {}, logCommit: async () => {} };
   const gitOps = new GitOps(logger);
 
   const { stdout } = await gitOps._git(projectDir, ['log', '--oneline', 'main']);

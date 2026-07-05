@@ -58,9 +58,9 @@ Implicit dependencies SHALL be set automatically: each phase after the first SHA
 - **WHEN** the first phase in the roadmap has no depends comment
 - **THEN** its `depends` property SHALL remain null, making it immediately eligible for execution
 
-#### Scenario: Dependency satisfaction check
-- **WHEN** `getNextPhase(roadmap, blockingParkedIds)` evaluates a phase whose dependency phase has all items complete or parked (non-blocking)
-- **THEN** that phase SHALL be considered ready and returned as the next phase
+#### Scenario: Dependency enforcement by Morgan
+- **WHEN** Morgan works the roadmap and a phase's dependency phase still has pending items
+- **THEN** Morgan SHALL NOT start that phase, per the roadmap execution rules in his orchestration prompt
 
 ### Group Concurrency
 The system SHALL support two modes of group concurrency within a phase:
@@ -94,9 +94,9 @@ The system SHALL update the roadmap.md file in-place to reflect item completion 
 
 Morgan SHALL edit roadmap.md directly to mark items complete by changing `[ ]` to `[x]` after implementing each item and verifying tests pass.
 
-The `markItemComplete(id)` method SHALL remain available for programmatic use by the run lifecycle wrapper.
+The `markItemComplete(id)` method SHALL remain available for programmatic use by the run lifecycle wrapper (post-consolidation roadmap audit).
 
-The `markItemParked(id)` method SHALL change the checkbox marker from any state to `[!]` for the matching requirement ID.
+Morgan SHALL mark items parked by editing the checkbox marker to `[!]` directly in roadmap.md.
 
 #### Scenario: Morgan marks item complete directly
 - **WHEN** Morgan finishes a roadmap item and tests pass
@@ -106,23 +106,6 @@ The `markItemParked(id)` method SHALL change the checkbox marker from any state 
 - **WHEN** `markItemComplete('user-auth')` is called and the roadmap contains `- [ ] \`user-auth\` -- Description`
 - **THEN** the file SHALL be rewritten with `- [x] \`user-auth\` -- Description`
 
-#### Scenario: Mark item parked
-- **WHEN** `markItemParked('api-routes')` is called
-- **THEN** the checkbox marker for `api-routes` SHALL be changed to `[!]`
-
 #### Scenario: Regex escaping in requirement IDs
 - **WHEN** a requirement ID contains regex-special characters (e.g., dots or brackets)
 - **THEN** the system SHALL escape them via `_escapeRegex` before constructing the replacement pattern
-
-### Phase Completion Detection
-The system SHALL provide a way to detect when all roadmap work is complete.
-
-The `isComplete(roadmap)` method SHALL return true when every item in every group in every phase has status `complete` or `parked`.
-
-#### Scenario: All items complete
-- **WHEN** `isComplete(roadmap)` is called and every item across all phases is `complete` or `parked`
-- **THEN** the method SHALL return true
-
-#### Scenario: Pending items remain
-- **WHEN** at least one item in any phase has status `pending`
-- **THEN** `isComplete` SHALL return false

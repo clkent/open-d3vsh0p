@@ -7,7 +7,7 @@ Ensures `[HUMAN]` roadmap items that are prerequisites for agent work are never 
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/roadmap/roadmap-reader.js` — `[HUMAN]` tag parsing and phase dependency resolution with blocking items
+- `platform/orchestrator/src/roadmap/roadmap-reader.js` — `[HUMAN]` tag parsing
 - `platform/orchestrator/src/roadmap/action-resolver.js` — analysis of incomplete `[HUMAN]` items for the action command
 - `templates/agents/_shared/roadmap-execution-rules.md` — instructs Morgan to skip `[HUMAN]` items
 - `templates/agents/_shared/roadmap-rules.md` — Group Z checkpoint convention (non-blocking `[HUMAN]` items)
@@ -15,15 +15,11 @@ IMPLEMENTED
 ## Requirements
 
 ### `[HUMAN]` Tag Parsing
-The roadmap reader SHALL detect `[HUMAN]` tags in item descriptions and set an `isHuman` flag on the parsed item. Human items SHALL be preserved when parked items are reset (unless explicitly included), and the reader SHALL support annotating a parked item with a `[HUMAN]` marker.
+The roadmap reader SHALL detect `[HUMAN]` tags in item descriptions and set an `isHuman` flag on the parsed item.
 
 #### Scenario: HUMAN item detection
 - **WHEN** a roadmap item has `[HUMAN]` in its description
 - **THEN** the parsed item SHALL have `isHuman: true`
-
-#### Scenario: Reset preserves HUMAN items
-- **WHEN** parked items are reset to pending without `includeHuman`
-- **THEN** parked items tagged `[HUMAN]` SHALL remain parked
 
 ### Agents Skip `[HUMAN]` Items
 Morgan's roadmap execution rules SHALL instruct him to skip items tagged `[HUMAN]` — these require manual action the developer must do. Parked `[!]` items SHALL be re-attempted only when they are not tagged `[HUMAN]`.
@@ -33,17 +29,17 @@ Morgan's roadmap execution rules SHALL instruct him to skip items tagged `[HUMAN
 - **THEN** Morgan SHALL leave it for the developer and move on rather than spending budget on it
 
 ### Dependent Phase Blocking
-Phases that depend on a phase with unresolved blocking items SHALL NOT begin execution until those items are completed. The roadmap reader's `getNextPhase(roadmap, blockingParkedIds)` SHALL treat parked items whose IDs are in `blockingParkedIds` as unsatisfied dependencies.
+Phases that depend on a phase with unresolved blocking `[HUMAN]` items SHALL NOT begin execution until those items are completed. Morgan's roadmap execution rules SHALL instruct him to treat incomplete `[HUMAN]` prerequisites in a dependency phase as blocking, while Group Z user-testing checkpoints remain non-blocking.
 
 #### Scenario: Dependent phase waits for blocking items
 - **WHEN** Phase II depends on Phase I
-- **AND** Phase I has parked items listed in `blockingParkedIds`
-- **THEN** `getNextPhase` SHALL NOT return Phase II
+- **AND** Phase I has an incomplete `[HUMAN]` prerequisite (non-Group-Z)
+- **THEN** Morgan SHALL NOT start Phase II and SHALL surface the blocking item to the developer
 
-#### Scenario: Non-blocking parked items do not block dependent phases
+#### Scenario: Group Z checkpoints do not block dependent phases
 - **WHEN** Phase II depends on Phase I
-- **AND** Phase I's parked items are not in `blockingParkedIds` (e.g., Group Z checkpoints)
-- **THEN** `getNextPhase` SHALL consider Phase I satisfied and return Phase II
+- **AND** Phase I's only incomplete `[HUMAN]` items are Group Z user-testing checkpoints
+- **THEN** Morgan SHALL treat Phase I as satisfied and proceed with Phase II
 
 ### Surfacing via the Action Command
 The `action` command SHALL surface incomplete `[HUMAN]` items to the developer for interactive resolution. The action resolver SHALL analyze the roadmap, filter to incomplete items with `isHuman: true` in actionable phases, and classify each by action type (e.g., environment setup for API-key/credentials items).

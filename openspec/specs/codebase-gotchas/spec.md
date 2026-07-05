@@ -9,22 +9,10 @@ Supersedes: **Codebase Grounding**
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/roadmap/openspec-reader.js` -- `parseGotchas()` method
 - `platform/orchestrator/src/commands/kickoff.js` -- references `openspec/gotchas.md` in the generated project CLAUDE.md
 - `templates/project-starter/CLAUDE.md` -- starter CLAUDE.md pointing agents at `openspec/gotchas.md`
 
 ## Requirements
-
-### Gotchas File Reader
-The OpenSpec reader SHALL provide a `parseGotchas()` method that reads `openspec/gotchas.md` from the project directory.
-
-#### Scenario: Gotchas file exists
-- **WHEN** `parseGotchas()` is called and `openspec/gotchas.md` exists
-- **THEN** it SHALL return the file contents
-
-#### Scenario: No gotchas file
-- **WHEN** `parseGotchas()` is called and `openspec/gotchas.md` does not exist
-- **THEN** it SHALL return `null` without throwing
 
 ### Gotchas Reference in Generated CLAUDE.md
 The kickoff command SHALL surface gotchas to agents via the project's CLAUDE.md. When `openspec/gotchas.md` exists at CLAUDE.md generation time, the generated file SHALL include a `## Gotchas` section directing agents to read `openspec/gotchas.md` for known pitfalls and surprising patterns.

@@ -1,8 +1,5 @@
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs/promises');
-const path = require('path');
-const os = require('os');
 const { GitOps } = require('./git-ops');
 
 describe('GitOps', () => {
@@ -17,8 +14,7 @@ describe('GitOps', () => {
 
     logger = {
       log: async (level, event, data) => { logEntries.push({ level, event, data }); },
-      logCommit: async (sha, message) => { logEntries.push({ type: 'commit', sha, message }); },
-      logMerge: async (reqId, branch) => { logEntries.push({ type: 'merge', reqId, branch }); }
+      logCommit: async (sha, message) => { logEntries.push({ type: 'commit', sha, message }); }
     };
 
     git = new GitOps(logger);
@@ -35,15 +31,6 @@ describe('GitOps', () => {
       }
       return git._gitDefault;
     };
-  });
-
-  describe('getCurrentBranch', () => {
-    it('returns trimmed stdout', async () => {
-      git._gitResults = [{ stdout: '  main\n', stderr: '' }];
-      const branch = await git.getCurrentBranch('/proj');
-      assert.equal(branch, 'main');
-      assert.deepEqual(gitCalls[0].args, ['rev-parse', '--abbrev-ref', 'HEAD']);
-    });
   });
 
   describe('hasChanges', () => {
@@ -96,158 +83,6 @@ describe('GitOps', () => {
       const commitLog = logEntries.find(e => e.type === 'commit');
       assert.ok(commitLog);
       assert.equal(commitLog.sha, 'def456');
-    });
-  });
-
-  describe('branchExists', () => {
-    it('returns true on success', async () => {
-      git._gitResults = [{ stdout: '', stderr: '' }];
-      assert.equal(await git.branchExists('/proj', 'feature'), true);
-    });
-
-    it('returns false on error', async () => {
-      git._gitResults = [new Error('not found')];
-      assert.equal(await git.branchExists('/proj', 'nope'), false);
-    });
-  });
-
-  describe('getDiff', () => {
-    it('returns three-dot diff output', async () => {
-      git._gitResults = [{ stdout: 'diff --git a/f.js\n+line\n', stderr: '' }];
-      const diff = await git.getDiff('/proj', 'main');
-      assert.equal(diff, 'diff --git a/f.js\n+line\n');
-      assert.ok(gitCalls[0].args.includes('main...HEAD'));
-    });
-
-    it('falls back to two-dot diff on error', async () => {
-      git._gitResults = [
-        new Error('no common ancestor'),
-        { stdout: 'fallback diff\n', stderr: '' }
-      ];
-      const diff = await git.getDiff('/proj', 'main');
-      assert.equal(diff, 'fallback diff\n');
-      assert.deepEqual(gitCalls[1].args, ['diff', 'main']);
-    });
-  });
-
-  describe('getDiffStat', () => {
-    it('returns stat output', async () => {
-      git._gitResults = [{ stdout: ' 2 files changed\n', stderr: '' }];
-      const stat = await git.getDiffStat('/proj', 'main');
-      assert.equal(stat, ' 2 files changed\n');
-    });
-
-    it('returns empty string on error', async () => {
-      git._gitResults = [new Error('fail')];
-      const stat = await git.getDiffStat('/proj', 'main');
-      assert.equal(stat, '');
-    });
-  });
-
-  describe('getBranchDiff', () => {
-    it('returns diffStat and diff from branch', async () => {
-      git._gitResults = [
-        { stdout: ' 2 files changed, 10 insertions(+)\n', stderr: '' },
-        { stdout: 'diff --git a/src/index.js\n+new code\n', stderr: '' }
-      ];
-      const result = await git.getBranchDiff('/proj', 'devshop/work-abc/req-1');
-      assert.equal(result.diffStat, '2 files changed, 10 insertions(+)');
-      assert.equal(result.diff, 'diff --git a/src/index.js\n+new code\n');
-      assert.ok(gitCalls[0].args.includes('main...devshop/work-abc/req-1'));
-      assert.ok(gitCalls[1].args.includes('main...devshop/work-abc/req-1'));
-    });
-
-    it('truncates diff at maxBytes', async () => {
-      const largeDiff = 'x'.repeat(20000);
-      git._gitResults = [
-        { stdout: '1 file changed\n', stderr: '' },
-        { stdout: largeDiff, stderr: '' }
-      ];
-      const result = await git.getBranchDiff('/proj', 'devshop/work-abc/req-1', 100);
-      assert.equal(result.diff.length, 100 + '\n... [truncated at 100 bytes]'.length);
-      assert.ok(result.diff.endsWith('[truncated at 100 bytes]'));
-    });
-
-    it('returns empty strings on git errors', async () => {
-      git._gitResults = [
-        new Error('no common ancestor'),
-        new Error('branch not found')
-      ];
-      const result = await git.getBranchDiff('/proj', 'devshop/work-abc/req-1');
-      assert.equal(result.diffStat, '');
-      assert.equal(result.diff, '');
-    });
-
-    it('returns diffStat even when diff fails', async () => {
-      git._gitResults = [
-        { stdout: ' 3 files changed\n', stderr: '' },
-        new Error('diff too large')
-      ];
-      const result = await git.getBranchDiff('/proj', 'devshop/work-abc/req-1');
-      assert.equal(result.diffStat, '3 files changed');
-      assert.equal(result.diff, '');
-    });
-
-    it('uses default maxBytes of 8192', async () => {
-      const largeDiff = 'y'.repeat(10000);
-      git._gitResults = [
-        { stdout: '', stderr: '' },
-        { stdout: largeDiff, stderr: '' }
-      ];
-      const result = await git.getBranchDiff('/proj', 'devshop/work-abc/req-1');
-      assert.ok(result.diff.startsWith('y'.repeat(8192)));
-      assert.ok(result.diff.includes('[truncated at 8192 bytes]'));
-    });
-  });
-
-  describe('createWorkBranch', () => {
-    it('checks out session branch and creates work branch', async () => {
-      // branchExists returns false (no stale branch)
-      git._gitResults = [
-        { stdout: '', stderr: '' },  // checkout session
-        new Error('not found'),       // branchExists -> false
-        { stdout: '', stderr: '' }   // checkout -b work
-      ];
-      const branch = await git.createWorkBranch('/proj', 'devshop/session-abc', 'user-auth');
-      assert.equal(branch, 'devshop/work-abc/user-auth');
-      assert.deepEqual(gitCalls[0].args, ['checkout', 'devshop/session-abc']);
-    });
-
-    it('deletes stale branch if it exists', async () => {
-      git._gitResults = [
-        { stdout: '', stderr: '' },  // checkout session
-        { stdout: '', stderr: '' },  // branchExists -> true
-        { stdout: '', stderr: '' },  // branch -D (delete stale)
-        { stdout: '', stderr: '' }   // checkout -b work
-      ];
-      await git.createWorkBranch('/proj', 'devshop/session-abc', 'user-auth');
-      assert.deepEqual(gitCalls[2].args, ['branch', '-D', 'devshop/work-abc/user-auth']);
-      const deleteLog = logEntries.find(e => e.event === 'stale_branch_deleted');
-      assert.ok(deleteLog);
-    });
-
-    it('logs branch creation', async () => {
-      git._gitResults = [
-        { stdout: '', stderr: '' },
-        new Error('not found'),
-        { stdout: '', stderr: '' }
-      ];
-      await git.createWorkBranch('/proj', 'devshop/session-abc', 'req-1');
-      const createLog = logEntries.find(e => e.event === 'branch_created');
-      assert.ok(createLog);
-      assert.equal(createLog.data.from, 'devshop/session-abc');
-    });
-  });
-
-  describe('mergeWorkToSession', () => {
-    it('checkouts session and merges with --no-ff', async () => {
-      git._gitResults = [
-        { stdout: '', stderr: '' }, // checkout
-        { stdout: '', stderr: '' }  // merge
-      ];
-      await git.mergeWorkToSession('/proj', 'session', 'work', 'req-1');
-      assert.deepEqual(gitCalls[0].args, ['checkout', 'session']);
-      assert.deepEqual(gitCalls[1].args, ['merge', '--no-ff', 'work', '-m', 'merge: req-1']);
     });
   });
 
@@ -311,39 +146,6 @@ describe('GitOps', () => {
       const warnLog = logEntries.find(e => e.event === 'worktree_remove_failed');
       assert.ok(warnLog);
       assert.equal(warnLog.level, 'warn');
-    });
-  });
-
-  describe('ensureWorktreeIgnored', () => {
-    let tmpDir;
-
-    beforeEach(async () => {
-      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitops-test-'));
-    });
-
-    afterEach(async () => {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    });
-
-    it('creates .gitignore with .worktrees when no .gitignore exists', async () => {
-      await git.ensureWorktreeIgnored(tmpDir);
-      const content = await fs.readFile(path.join(tmpDir, '.gitignore'), 'utf-8');
-      assert.equal(content, '.worktrees\n');
-    });
-
-    it('appends .worktrees to existing .gitignore that does not contain it', async () => {
-      await fs.writeFile(path.join(tmpDir, '.gitignore'), 'node_modules\n.env\n');
-      await git.ensureWorktreeIgnored(tmpDir);
-      const content = await fs.readFile(path.join(tmpDir, '.gitignore'), 'utf-8');
-      assert.equal(content, 'node_modules\n.env\n.worktrees\n');
-    });
-
-    it('makes no changes when .gitignore already contains .worktrees', async () => {
-      const original = 'node_modules\n.worktrees\n.env\n';
-      await fs.writeFile(path.join(tmpDir, '.gitignore'), original);
-      await git.ensureWorktreeIgnored(tmpDir);
-      const content = await fs.readFile(path.join(tmpDir, '.gitignore'), 'utf-8');
-      assert.equal(content, original);
     });
   });
 

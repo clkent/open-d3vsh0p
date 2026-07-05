@@ -98,8 +98,8 @@ Partials SHALL be loaded from `{templatesDir}/_shared/{partialName}.md` with a c
 - **THEN** all occurrences of `{{PROJECT_ID}}` in the template SHALL be replaced with "proj-001"
 
 #### Scenario: Partial include
-- **WHEN** a template contains `{{>testing-standards}}`
-- **THEN** the system SHALL load `_shared/testing-standards.md`, cache it, and replace the placeholder with the partial content (trimmed of trailing whitespace)
+- **WHEN** a template contains `{{>roadmap-rules}}`
+- **THEN** the system SHALL load `_shared/roadmap-rules.md`, cache it, and replace the placeholder with the partial content (trimmed of trailing whitespace)
 
 #### Scenario: Missing partial
 - **WHEN** a partial file does not exist at the expected path
@@ -109,21 +109,5 @@ Partials SHALL be loaded from `{templatesDir}/_shared/{partialName}.md` with a c
 - **WHEN** `renderString(template, vars)` is called with a string and variables
 - **THEN** the system SHALL perform variable substitution inline without loading any files or resolving partials
 
-### Prompt Building
-The system SHALL construct structured prompts for implementation, retry, review, and security audit scenarios from OpenSpec project metadata.
-
-The system SHALL parse requirements from the `## Requirements` section of `openspec/project.md`, where each `### Heading` becomes a requirement with an auto-generated kebab-case ID.
-
-#### Scenario: Implementation prompt
-- **WHEN** `buildImplementationPrompt(requirement)` is called
-- **THEN** the output SHALL contain sections for "Your Assignment", "Requirements" (bullet list), "Project Context" (working directory and source path), and "Instructions" (5-step process)
-
-#### Scenario: Retry prompt with error context
-- **WHEN** `buildRetryPrompt(requirement, errorContext)` is called with test failure output
-- **THEN** the output SHALL contain a "Previous Attempt Results" section with the error context and a "What To Do" section instructing focused fixes
-
-#### Scenario: Review prompt with diff
-- **WHEN** `buildReviewPrompt(requirement, diff, diffStat)` is called
-- **THEN** the output SHALL contain the requirement bullets, a "Changes Summary" with diffStat, the "Full Diff" in a code block, and review instructions
 
 

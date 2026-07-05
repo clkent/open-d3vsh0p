@@ -19,21 +19,6 @@ The system SHALL detect `[SPIKE]` tags in roadmap item descriptions and set an `
 - **WHEN** a roadmap item does not have `[SPIKE]` in its description
 - **THEN** the parsed item SHALL have `isSpike: false`
 
-### Spike Phase Identification
-The system SHALL provide an `isSpikePhase(phase)` method that returns true when all pending items in the phase are spikes.
-
-#### Scenario: All-spike phase
-- **WHEN** a phase has pending items and all of them have `isSpike: true`
-- **THEN** `isSpikePhase()` SHALL return `true`
-
-#### Scenario: Mixed phase
-- **WHEN** a phase has both spike and non-spike pending items
-- **THEN** `isSpikePhase()` SHALL return `false`
-
-#### Scenario: No pending items
-- **WHEN** a phase has no pending items
-- **THEN** `isSpikePhase()` SHALL return `false`
-
 ### Spike Investigation by Morgan
 Spike items SHALL be investigated by Morgan (principal engineer) directly within his run session — not delegated to implementation sub-agents. The shared roadmap rules SHALL state that `[SPIKE]` items are investigated by Morgan.
 

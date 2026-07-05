@@ -189,7 +189,7 @@ async function pairCommand(project, cliConfig) {
 
         try {
           const healthChecker = require('../quality/health-checker');
-          const hcConfig = await healthChecker.resolveHealthCheckConfig(cliConfig.projectDir, {});
+          const hcConfig = await healthChecker.resolveHealthCheckConfig(cliConfig.projectDir, config);
 
           if (hcConfig.commands.length > 0) {
             console.log('');
@@ -241,7 +241,7 @@ async function pairCommand(project, cliConfig) {
         rl.close();
 
         if (pushChoice.trim().toLowerCase() === 'y') {
-          await commitAndPush(cliConfig.projectDir, cliConfig.projectId);
+          await commitAndPush(cliConfig.projectDir, cliConfig.projectId, config);
         }
       }
     } catch { /* git check failed, continue with exit */ }
@@ -262,7 +262,7 @@ async function pairCommand(project, cliConfig) {
  * Commit and push any changes Morgan made during the pair session.
  * Creates a feature branch and pushes (projects have pre-push hooks blocking main).
  */
-async function commitAndPush(projectDir, projectId) {
+async function commitAndPush(projectDir, projectId, fullConfig = {}) {
   try {
     const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: projectDir });
     if (!status.trim()) {
@@ -273,7 +273,7 @@ async function commitAndPush(projectDir, projectId) {
 
     // Run health checks before committing
     const healthChecker = require('../quality/health-checker');
-    const hcConfig = await healthChecker.resolveHealthCheckConfig(projectDir, {});
+    const hcConfig = await healthChecker.resolveHealthCheckConfig(projectDir, fullConfig);
 
     if (hcConfig.commands.length > 0) {
       console.log('');
@@ -373,7 +373,7 @@ async function consolidateStaleSessionBranches(projectDir, projectId) {
     if (choice.trim().toLowerCase() !== 'y') return;
 
     const { GitOps } = require('../git/git-ops');
-    const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+    const logger = { log: async () => {}, logCommit: async () => {} };
     const gitOps = new GitOps(logger);
 
     // Ensure we're on main before consolidating

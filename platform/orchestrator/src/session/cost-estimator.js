@@ -40,21 +40,6 @@ class CostEstimator {
   }
 
   /**
-   * Estimate the cost of executing a phase based on pending items.
-   */
-  estimatePhaseCost(phase) {
-    let pendingCount = 0;
-    for (const group of phase.groups) {
-      for (const item of group.items) {
-        if (item.status === 'pending') {
-          pendingCount++;
-        }
-      }
-    }
-    return Math.round(pendingCount * this.getAverageCostPerRequirement() * 100) / 100;
-  }
-
-  /**
    * Predict whether the remaining budget is sufficient for the pending work.
    */
   predictSufficiency(remainingBudget, pendingItemCount) {

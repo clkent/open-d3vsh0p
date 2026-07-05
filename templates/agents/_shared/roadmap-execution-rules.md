@@ -17,6 +17,7 @@ For each pending item (`- [ ]`):
 ### Skipping Items
 - Skip items marked `[x]` (already complete).
 - Skip items tagged `[HUMAN]` — these require manual action the developer must do.
+- Incomplete `[HUMAN]` items in a dependency phase BLOCK dependent phases — do not start a phase whose dependency still has a pending `[HUMAN]` prerequisite; tell the developer to run `devshop action` instead. Exception: Group Z user-testing checkpoints are non-blocking.
 - Parked items `[!]` — attempt these unless they're tagged `[HUMAN]`. They failed in a previous session and may need a different approach.
 
 ### When to Stop

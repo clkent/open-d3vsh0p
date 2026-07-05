@@ -29,8 +29,16 @@
 - [x] 4.4 Update README (report section, health gate, window names)
 - [x] 4.5 Update llms.txt (triage-agent, quality/runners descriptions)
 
-## 5. Verification
+## 5. Method-Level Prune (follow-up pass)
 
-- [x] 5.1 npm test green in orchestrator + pm packages
-- [x] 5.2 Grep sweeps: no dangling references to deleted modules
-- [x] 5.3 Smoke: devshop help, syntax checks, defaults.json parses
+- [x] 5.1 Delete dead methods: git-ops (15), roadmap-reader (8), openspec-reader (14), logger (15 incl. writeSummary), cost-estimator.estimatePhaseCost — plus their tests
+- [x] 5.2 Delete transitively-dead modules: quality/review-parser.js, infra/json-extractor.js (+ tests)
+- [x] 5.3 Remove non-functional POST /agents/:role/invoke API stub
+- [x] 5.4 Fix pair.js to pass project config to health checks (was passing {})
+- [x] 5.5 Update affected specs (git-workflow, logging-observability, parallel-execution, spike-phases, agent-management, design-aware-agents, codebase-gotchas, rest-api, human-prerequisite-blocking) and roadmap annotation
+
+## 6. Verification
+
+- [x] 6.1 npm test green in orchestrator + pm packages
+- [x] 6.2 Grep sweeps: no dangling references to deleted modules
+- [x] 6.3 Smoke: devshop help, syntax checks, defaults.json parses

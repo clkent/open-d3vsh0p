@@ -65,7 +65,7 @@
 - [x] `predictive-budget-modeling` — Cost estimation from session history, pre-phase budget checks
 
 ### Group B: Observability
-- [x] `structured-review-scoring` — Dimensional review scores, ReviewParser, metrics in status output *(partial removal: ReviewParser lives on in logger)*
+- [x] `structured-review-scoring` — Dimensional review scores, ReviewParser, metrics in status output *(removed: remove-sdk-orchestrator)*
 - [x] `microcycle-progress-events` — Real-time progress thoughts from agents during microcycle phases *(removed: remove-sdk-orchestrator)*
 
 ### Group C: Quality Guardrails

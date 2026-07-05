@@ -101,47 +101,6 @@ describe('CostEstimator', () => {
     });
   });
 
-  describe('estimatePhaseCost', () => {
-    it('estimates cost based on pending items', async () => {
-      await writeSummary('session-1', [{ costUsd: 1.5 }, { costUsd: 1.5 }]);
-      await writeSummary('session-2', [{ costUsd: 1.5 }, { costUsd: 1.5 }]);
-      await writeSummary('session-3', [{ costUsd: 1.5 }, { costUsd: 1.5 }]);
-
-      const est = new CostEstimator(tmpDir);
-      await est.init();
-
-      const phase = {
-        groups: [{
-          items: [
-            { status: 'pending' },
-            { status: 'pending' },
-            { status: 'complete' },
-            { status: 'pending' }
-          ]
-        }]
-      };
-
-      const cost = est.estimatePhaseCost(phase);
-      assert.equal(cost, 4.5); // 3 pending × $1.50
-    });
-
-    it('returns 0 for fully complete phase', async () => {
-      const est = new CostEstimator(tmpDir);
-      await est.init();
-
-      const phase = {
-        groups: [{
-          items: [
-            { status: 'complete' },
-            { status: 'parked' }
-          ]
-        }]
-      };
-
-      assert.equal(est.estimatePhaseCost(phase), 0);
-    });
-  });
-
   describe('predictSufficiency', () => {
     it('returns sufficient when budget covers estimated cost', async () => {
       await writeSummary('session-1', [{ costUsd: 1.5 }]);
@@ -273,17 +232,6 @@ describe('CostEstimator', () => {
       assert.equal(prediction.estimatedCost, 15);
       assert.equal(prediction.remainingBudget, 2);
     });
-
-    it('skips check when phase has no pending items', async () => {
-      await writeSummary('session-1', [{ costUsd: 2.0 }]);
-
-      const est = new CostEstimator(tmpDir);
-      await est.init();
-
-      const phase = makePhase(0, 3); // all complete
-      const cost = est.estimatePhaseCost(phase);
-      assert.equal(cost, 0); // no pending → no cost → no warning needed
-    });
   });
 
   describe('output formatting', () => {
@@ -346,18 +294,6 @@ describe('CostEstimator', () => {
       // With 0 sessions, commands skip the estimate display entirely
       // The cold-start fallback is only used internally, not shown to the user
       assert.equal(est.getAverageCostPerRequirement(), COLD_START_FALLBACK);
-    });
-
-    it('estimatePhaseCost returns 0 when no pending items', async () => {
-      await writeSummary('session-1', [{ costUsd: 2.0 }]);
-
-      const est = new CostEstimator(tmpDir);
-      await est.init();
-
-      const phase = {
-        groups: [{ items: [{ status: 'complete' }, { status: 'complete' }] }]
-      };
-      assert.equal(est.estimatePhaseCost(phase), 0);
     });
   });
 });

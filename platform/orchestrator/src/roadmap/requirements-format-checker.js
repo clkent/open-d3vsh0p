@@ -8,7 +8,7 @@ const REQUIREMENT_ITEM_REGEX = /^### .+/;
 
 /**
  * Validate that project.md has a parseable Requirements section.
- * The orchestrator's OpenSpecReader._parseRequirements() expects:
+ * The expected format is:
  *   ## Requirements
  *   ### Requirement Name
  *   - Bullet point

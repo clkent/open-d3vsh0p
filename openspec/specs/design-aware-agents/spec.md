@@ -19,17 +19,6 @@ The `kickoff` command SHALL accept a `--design` flag. When provided, the project
 - **WHEN** the design skills cannot be installed (e.g., source missing)
 - **THEN** the scaffolder SHALL log a `design_skills_failed` warning and continue the kickoff
 
-### Design Skills Detection
-The system SHALL detect the presence of Impeccable design skills by checking for the `.claude/skills/frontend-design` directory in the project (`OpenSpecReader.hasDesignSkills()`).
-
-#### Scenario: Design skills present
-- **WHEN** the project directory contains `.claude/skills/frontend-design/`
-- **THEN** `hasDesignSkills()` SHALL return `true` and `getDesignSkillsSection()` SHALL return the design workflow instructions
-
-#### Scenario: Design skills absent
-- **WHEN** the project directory does not contain `.claude/skills/frontend-design/`
-- **THEN** `hasDesignSkills()` SHALL return `false` and `getDesignSkillsSection()` SHALL return an empty string
-
 ### Design Awareness in Generated CLAUDE.md
 When design skills are detected at CLAUDE.md generation time, the kickoff command SHALL add a Design section to the project's CLAUDE.md instructing agents to use the Impeccable design commands (e.g., `/impeccable polish`, `/impeccable audit`) when working on UI code. For frontend-looking projects without design skills, kickoff SHALL print a tip suggesting re-running with `--design`.
 
