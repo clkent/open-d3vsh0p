@@ -168,7 +168,10 @@ Clean up orphaned worktrees and stale branches after crashes. Also runs automati
 
 ### Project Health Check
 
-Before spawning Morgan, `run` executes the project's health check (tests + build, auto-detected or from `healthCheck` config — including native iOS/Android builds). If it fails, the failure output is injected into Morgan's prompt and repairing the baseline becomes his first task. Use `pair` to fix issues interactively instead.
+`run` executes the project's health check (tests + build, auto-detected or from `healthCheck` config — including native iOS/Android builds) at both ends of a session:
+
+- **Before spawning Morgan** — if the baseline is already broken, the failure output is injected into Morgan's prompt and repairing it becomes his first task.
+- **After Morgan exits** — the closing gate. If the session broke something Morgan didn't catch, Morgan is re-entered to repair it (up to 2 attempts, 15 min each). If it still fails, the session branch is **not** consolidated to main — fix interactively with `pair`, then consolidate with `run --resume`.
 
 ### Budget & Time Limits
 

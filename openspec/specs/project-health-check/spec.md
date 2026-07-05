@@ -116,6 +116,31 @@ If the preflight itself errors (e.g., config resolution fails), the run command 
 - **WHEN** `runPreflightHealthCheck()` throws while resolving config or running commands
 - **THEN** the run command SHALL print a skip notice and spawn Morgan without a failure block
 
+### Post-Session Health Verification
+After Morgan's CLI session exits, the run command SHALL verify project health again — the closing gate that catches anything broken that Morgan missed during the session.
+
+The post-session check SHALL run only when the session actually changed the project (new commits since the pre-session HEAD, or uncommitted working-tree changes). When git state cannot be determined, the check SHALL run anyway.
+
+On failure, the run command SHALL resume Morgan's session with the failure output and an instruction to repair (not start new roadmap work), up to 2 repair attempts, each capped at 15 minutes.
+
+If the health check still fails after all repair attempts, the run command SHALL skip auto-consolidation to main — broken code SHALL NOT be merged — and SHALL direct the user to fix interactively via `pair` and consolidate later via `run --resume`.
+
+#### Scenario: Healthy session consolidates normally
+- **WHEN** Morgan's session exits with completed items and the post-session health check passes
+- **THEN** the run command SHALL proceed to auto-consolidation as usual
+
+#### Scenario: Morgan re-entered to repair post-session breakage
+- **WHEN** the post-session health check fails after a session that changed the project
+- **THEN** the run command SHALL resume Morgan's session with the failing commands' output and instruct him to repair, commit, and re-verify
+
+#### Scenario: Consolidation blocked by failing health
+- **WHEN** the post-session health check still fails after the repair attempts
+- **THEN** the session branch SHALL NOT be consolidated to main, and the console SHALL direct the user to `pair` for an interactive fix
+
+#### Scenario: Unchanged session skips the post-check
+- **WHEN** Morgan's session exits without any new commits or working-tree changes
+- **THEN** the post-session health check SHALL be skipped
+
 ### Health Check Never Blocks the Run
 A failing preflight health check SHALL NOT prevent Morgan's session from starting. The run command SHALL always proceed to spawn Morgan; repair happens inside the session.
 

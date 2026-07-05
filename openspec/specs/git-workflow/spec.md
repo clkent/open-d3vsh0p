@@ -64,7 +64,7 @@ After Morgan's session exits, the run command SHALL attempt auto-consolidation t
 ### Session Consolidation
 The system SHALL automatically consolidate completed session branches to main after Morgan's session exits by creating a pull request and merging it.
 
-The consolidation SHALL only occur when the session has at least one completed requirement.
+The consolidation SHALL only occur when the session has at least one completed requirement AND the post-session health check is not failing (see the project-health-check spec).
 
 The consolidation SHALL use the existing `consolidateToMain()` method with enhanced PR metadata.
 

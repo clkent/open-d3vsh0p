@@ -46,8 +46,16 @@
 - [x] 7.5 Stub session/token-estimator.js for the future token-based estimator; add pending roadmap item + project.md requirement
 - [x] 7.6 Update specs: cadence-automation, daily-scheduling, cli-interface; annotate roadmap
 
-## 8. Verification
+## 8. Post-Session Health Gate (follow-up pass)
 
-- [x] 8.1 npm test green in orchestrator + pm packages
-- [x] 8.2 Grep sweeps: no dangling references to deleted modules
-- [x] 8.3 Smoke: devshop help, syntax checks, defaults.json parses
+- [x] 8.1 Add runHealthCheckReport shared helper; refactor preflight onto it
+- [x] 8.2 Post-session health verification: runs when the session changed the project, re-enters Morgan to repair (max 2 attempts, 15 min cap each)
+- [x] 8.3 Skip consolidation to main when post-session health still failing; direct to pair + run --resume
+- [x] 8.4 Tests for runHealthCheckReport and didSessionChangeProject
+- [x] 8.5 Update project-health-check + git-workflow specs and README
+
+## 9. Verification
+
+- [x] 9.1 npm test green in orchestrator + pm packages
+- [x] 9.2 Grep sweeps: no dangling references to deleted modules
+- [x] 9.3 Smoke: devshop help, syntax checks, defaults.json parses

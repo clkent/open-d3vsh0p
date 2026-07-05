@@ -289,3 +289,84 @@ describe('runPreflightHealthCheck', () => {
     assert.equal(result, '');
   });
 });
+
+describe('runHealthCheckReport', () => {
+  const { runHealthCheckReport } = require('./run');
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hc-report-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('reports ran=false when no commands resolve', async () => {
+    const report = await runHealthCheckReport(tmpDir, {});
+    assert.deepEqual(report, { ran: false, passed: true, failureDetails: '' });
+  });
+
+  it('reports passed=true with empty details when commands pass', async () => {
+    const report = await runHealthCheckReport(tmpDir, { healthCheck: { commands: ['true'] } });
+    assert.equal(report.ran, true);
+    assert.equal(report.passed, true);
+    assert.equal(report.failureDetails, '');
+  });
+
+  it('reports passed=false with failing command details', async () => {
+    const report = await runHealthCheckReport(tmpDir, { healthCheck: { commands: ['true', 'false'] } });
+    assert.equal(report.ran, true);
+    assert.equal(report.passed, false);
+    assert.ok(report.failureDetails.includes('### `false`'));
+    assert.ok(!report.failureDetails.includes('### `true`'));
+  });
+});
+
+describe('didSessionChangeProject', () => {
+  const { didSessionChangeProject } = require('./run');
+  const { execSync } = require('child_process');
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'did-change-test-'));
+    execSync('git init && git checkout -b main', { cwd: tmpDir });
+    execSync('git config user.email "t@t.com" && git config user.name "T"', { cwd: tmpDir });
+    await fs.writeFile(path.join(tmpDir, 'a.txt'), 'one');
+    execSync('git add -A && git commit -m init', { cwd: tmpDir });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  function headSha() {
+    return execSync('git rev-parse HEAD', { cwd: tmpDir }).toString().trim();
+  }
+
+  it('returns false when nothing changed', async () => {
+    assert.equal(await didSessionChangeProject(tmpDir, headSha()), false);
+  });
+
+  it('returns true when a new commit exists', async () => {
+    const pre = headSha();
+    await fs.writeFile(path.join(tmpDir, 'a.txt'), 'two');
+    execSync('git add -A && git commit -m change', { cwd: tmpDir });
+    assert.equal(await didSessionChangeProject(tmpDir, pre), true);
+  });
+
+  it('returns true when uncommitted changes exist', async () => {
+    const pre = headSha();
+    await fs.writeFile(path.join(tmpDir, 'b.txt'), 'new file');
+    assert.equal(await didSessionChangeProject(tmpDir, pre), true);
+  });
+
+  it('errs on the side of checking when not a git repo', async () => {
+    const nonRepo = await fs.mkdtemp(path.join(os.tmpdir(), 'non-repo-'));
+    try {
+      assert.equal(await didSessionChangeProject(nonRepo, 'abc'), true);
+    } finally {
+      await fs.rm(nonRepo, { recursive: true, force: true });
+    }
+  });
+});
