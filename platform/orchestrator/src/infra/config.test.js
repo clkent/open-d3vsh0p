@@ -70,10 +70,8 @@ describe('config', () => {
     it('loads defaults.json and returns expected default values', async () => {
       const defaults = await loadDefaults();
       assert.equal(defaults.budgetLimitUsd, 30);
-      assert.deepEqual(defaults.retryLimits, { implementation: 3, implementationMaxAttempts: 7, testFix: 3, reviewFix: 2 });
-      assert.equal(defaults.git.sessionBranchPrefix, 'devshop/session');
-      assert.equal(defaults.parallelism.maxConcurrentGroups, 4);
-      assert.equal(Object.keys(defaults.agents).length, 8);
+      assert.equal(defaults.timeLimitMs, 25200000);
+      assert.deepEqual(Object.keys(defaults.agents).sort(), ['pair', 'pm', 'principal-engineer', 'security']);
     });
 
     it('includes healthCheck defaults', async () => {
@@ -88,7 +86,7 @@ describe('config', () => {
     it('returns defaults when no overrides', async () => {
       const config = await loadConfig({});
       assert.equal(config.budgetLimitUsd, 30);
-      assert.deepEqual(config.retryLimits, { implementation: 3, implementationMaxAttempts: 7, testFix: 3, reviewFix: 2 });
+      assert.equal(config.healthCheck.timeoutMs, 120000);
     });
 
     it('merges project overrides from activeAgentsDir', async () => {
@@ -99,7 +97,7 @@ describe('config', () => {
       // Mock readFile to intercept override path
       fs.readFile = async (filePath, ...args) => {
         if (filePath.includes('orchestrator/config.json')) {
-          return JSON.stringify({ budgetLimitUsd: 50, retryLimits: { implementation: 5 } });
+          return JSON.stringify({ budgetLimitUsd: 50, healthCheck: { timeoutMs: 60000 } });
         }
         return realReadFile(filePath, ...args);
       };
@@ -110,9 +108,9 @@ describe('config', () => {
 
       const config = await lc({ activeAgentsDir: '/tmp/fake-agents' });
       assert.equal(config.budgetLimitUsd, 50);
-      assert.equal(config.retryLimits.implementation, 5);
+      assert.equal(config.healthCheck.timeoutMs, 60000);
       // Unmodified defaults should still be present
-      assert.equal(config.retryLimits.testFix, 3);
+      assert.equal(config.healthCheck.nativeBuildTimeoutMs, 300000);
 
       fs.readFile = originalReadFile;
     });

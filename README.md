@@ -129,7 +129,7 @@ Tests run automatically via pre-commit hook and GitHub Actions CI.
 ./devshop schedule remove my-app     # Remove the schedule
 ```
 
-When scheduled, Morgan runs autonomously in time windows (morning, afternoon, evening, night) with per-window budget and time limits.
+When scheduled, Morgan runs autonomously in time windows (night, morning, day, techdebt) with per-window budget and time limits.
 
 ### Design Skills
 
@@ -166,21 +166,13 @@ Clean up orphaned worktrees and stale branches after crashes. Also runs automati
 ./devshop cadence run my-app --type monthly    # Archive parked items, cost review
 ```
 
-### Bug Reports
-
-```bash
-./devshop report my-app
-```
-
-Queue bug reports or feature requests while Morgan is working. Processed between phases.
-
 ### Project Health Check
 
-On fresh sessions, Morgan runs a health check gate (tests + build) before starting work. If the check fails, Morgan attempts repair automatically. If that fails, you drop into pair mode to fix it together.
+Before spawning Morgan, `run` executes the project's health check (tests + build, auto-detected or from `healthCheck` config — including native iOS/Android builds). If it fails, the failure output is injected into Morgan's prompt and repairing the baseline becomes his first task. Use `pair` to fix issues interactively instead.
 
 ### Budget & Time Limits
 
-Default: $30/session, 7-hour time limit. Morgan self-regulates and the orchestrator enforces a hard timeout. Press Ctrl+C for graceful pause — Morgan finishes current work, commits, and stops.
+Default: $30/session, 7-hour time limit. Morgan self-regulates and the orchestrator enforces a hard timeout. Use Ctrl+C or /exit to end the session — resume later with `--resume`.
 
 ## Security & Trust Model
 

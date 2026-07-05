@@ -22,10 +22,6 @@ const CONTEXT_FILES = [
     label: 'Roadmap Format Checker — detects near-miss items, wrong heading levels, spec-count mismatches'
   },
   {
-    path: 'templates/agents/implementation-agent/system-prompt.md',
-    label: 'Implementation Agent Prompt — this is what implementation agents see when they build from your specs'
-  },
-  {
     path: 'templates/agents/principal-engineer/system-prompt.md',
     label: 'Review Agent Prompt — this is what the principal engineer checks during code review'
   }

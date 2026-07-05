@@ -1,21 +1,20 @@
 # CLI Interface
 
 ## Purpose
-Provides the command-line entry point for the DevShop orchestrator. Parses commands and options, resolves projects from the registry, validates directories, and dispatches to the appropriate command handler. Supports commands for the full development workflow: run, plan, talk, report, status, watch, and help.
+Provides the command-line entry point for the DevShop orchestrator. Parses commands and options, resolves projects from the registry, validates directories, and dispatches to the appropriate command handler. Supports commands for the full development workflow: kickoff, run, plan, talk, pair, status, schedule, cadence, action, recover, security, api, and help.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
 - `platform/orchestrator/src/index.js` -- main CLI entry point with argument parsing, project resolution, and command dispatch
-- `platform/orchestrator/src/commands/run.js` -- run command handler with roadmap-based parallel execution
+- `platform/orchestrator/src/commands/run.js` -- run command handler that spawns Morgan as a Claude Code CLI session
 - `platform/orchestrator/src/commands/status.js` -- status command handler displaying roadmap, session, and summary information
-- `platform/orchestrator/src/commands/watch.js` -- watch command handler connecting to broadcast server and displaying real-time events
 
 ## Requirements
 
 ### Commands
-The system SHALL support the following commands: `run`, `plan`, `talk`, `report`, `status`, `watch`, and `help` (among others). The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1.
+The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk`, `pair`, `status`, `schedule`, `cadence`, `action`, `recover`, `security`, `api`, and `help`. The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1.
 
 #### Scenario: Valid command dispatch
 - **WHEN** `node src/index.js run my-project` is executed
@@ -34,7 +33,7 @@ The system SHALL support the following commands: `run`, `plan`, `talk`, `report`
 - **THEN** the system SHALL print usage showing all commands, options, and examples, then exit with code 0
 
 ### Option Parsing
-The system SHALL parse CLI options using `node:util` `parseArgs` with the following options: `--budget` (string, default "30"), `--time-limit` (string, default "7"), `--resume` (boolean, default false), `--dry-run` (boolean, default false), `--requirements` (string), and `--status` (boolean, default false). Budget SHALL be parsed as USD float. Time limit SHALL be parsed as hours and converted to milliseconds (multiplied by 3,600,000). Requirements SHALL be split by comma into an array of trimmed strings.
+The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30"), `--time-limit` (string, default "7"), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Budget SHALL be parsed as USD float. Time limit SHALL be parsed as hours and converted to milliseconds (multiplied by 3,600,000). Requirements SHALL be split by comma into an array of trimmed strings.
 
 #### Scenario: Default budget and time limit
 - **WHEN** no --budget or --time-limit options are provided
@@ -118,7 +117,7 @@ The system SHALL display project status including roadmap progress, active sessi
 - **WHEN** `status` is executed and a state.json exists in `active-agents/{project}/orchestrator/`
 - **THEN** the system SHALL display session ID, state, branch, current working requirement (if any), completed/pending/parked counts, cost, and invocation count
 
-#### Scenario: Parallel mode active agents display
+#### Scenario: Active agents display
 - **WHEN** `status` is executed and state.json contains a non-empty `activeAgents` array
 - **THEN** the system SHALL display each active agent's persona, group label, and requirement ID
 
@@ -178,43 +177,3 @@ The system SHALL catch unhandled errors from the main function, print `Fatal err
 #### Scenario: Debug mode stack trace
 - **WHEN** an error occurs and `process.env.DEBUG` is set
 - **THEN** the full stack trace SHALL be printed to stderr in addition to the error message
-
-### Watch Command
-The system SHALL support a `watch` command that connects to a running orchestrator session's broadcast server and displays agent activity in real time.
-
-The command SHALL accept a project ID as a positional argument and an optional `--port` flag (default 3100).
-
-#### Scenario: Watch connects to active session
-- **WHEN** `./devshop watch my-project` is executed and a broadcast server is running on port 3100
-- **THEN** the system SHALL connect via WebSocket and begin printing events to the terminal
-
-#### Scenario: Watch with custom port
-- **WHEN** `./devshop watch my-project --port 3200` is executed
-- **THEN** the system SHALL connect to `ws://localhost:3200`
-
-#### Scenario: No active session
-- **WHEN** `./devshop watch my-project` is executed and no broadcast server is running
-- **THEN** the system SHALL print "No active session for my-project. Start one with: ./devshop run my-project" and exit with code 1
-
-#### Scenario: Session ends while watching
-- **WHEN** the WebSocket connection closes because the orchestrator session completed
-- **THEN** the watch command SHALL print "Session ended." and exit with code 0
-
-### Watch Terminal Output
-The watch command SHALL format broadcast events for terminal readability.
-
-Agent events SHALL show the persona name, requirement ID, and message content.
-
-Orchestrator events SHALL show the event type with contextual data, using level-appropriate indicators.
-
-#### Scenario: Agent assistant message displayed
-- **WHEN** an agent event with `type: "assistant"` is received for persona "Jordan" on requirement "user-auth"
-- **THEN** the terminal SHALL display the persona name, requirement, and the assistant's text content
-
-#### Scenario: Orchestrator phase event displayed
-- **WHEN** an orchestrator event with eventType "phase_started" is received
-- **THEN** the terminal SHALL display the phase information with an info-level indicator
-
-#### Scenario: Review result displayed
-- **WHEN** an orchestrator event with eventType "review_approved" is received
-- **THEN** the terminal SHALL display the review outcome with the requirement ID

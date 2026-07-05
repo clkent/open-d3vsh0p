@@ -18,9 +18,9 @@ platform/orchestrator/          — The brain. Node.js orchestrator that drives 
   src/commands/cli-spawn.js     — Shared Claude CLI spawn utilities
   src/agents/                   — Agent runner, session, and template engine
   src/git/                      — Git operations, merge, consolidation
-  src/quality/                  — Health checks, convention checks, review parsing
+  src/quality/                  — Health checks, review parsing
   src/roadmap/                  — Roadmap reader/writer, format checkers, OpenSpec reader
-  src/runners/                  — Repair, security, scaffolding
+  src/runners/                  — Security scanning, tech debt, scaffolding, GitHub digests
   src/session/                  — Cost tracking, session utils, path utils
   src/scheduler/                — launchd/cron integration for automated runs
 
@@ -28,7 +28,6 @@ templates/agents/               — System prompt templates for each agent role
   pm-agent/                     — PM agent — creates specs and roadmaps via interactive Q&A
   principal-engineer/           — Principal engineer — orchestrates runs, reviews, repairs, pairs
   security-agent/               — Security agent — vulnerability scanning
-  triage-agent/                 — Triage agent — classifies parked items
   _shared/                      — Shared prompt partials (roadmap rules, delegation, etc.)
 
 openspec/                       — d3vsh0p's own specs (it uses OpenSpec on itself)

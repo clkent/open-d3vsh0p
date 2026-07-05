@@ -6,7 +6,7 @@ const { resolveProject, loadRegistry, saveRegistry, DEVSHOP_ROOT } = require('./
 const TEMPLATES_DIR = path.join(DEVSHOP_ROOT, 'templates', 'agents');
 const ACTIVE_AGENTS_DIR = path.join(DEVSHOP_ROOT, 'active-agents');
 
-const COMMANDS = ['kickoff', 'run', 'plan', 'talk', 'pair', 'status', 'schedule', 'cadence', 'action', 'recover', 'watch', 'report', 'security', 'api', 'help'];
+const COMMANDS = ['kickoff', 'run', 'plan', 'talk', 'pair', 'status', 'schedule', 'cadence', 'action', 'recover', 'security', 'api', 'help'];
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -21,15 +21,12 @@ async function main() {
       window: { type: 'string' },
       type: { type: 'string' },
       'no-consolidate': { type: 'boolean', default: false },
-      'watch-port': { type: 'string' },
       port: { type: 'string' },
-      status: { type: 'boolean', default: false },
       focus: { type: 'string' },
       timeout: { type: 'string' },
       schedule: { type: 'string' },
       unschedule: { type: 'boolean', default: false },
-      design: { type: 'boolean', default: false },
-      watch: { type: 'boolean', default: true }
+      design: { type: 'boolean', default: false }
     }
   });
 
@@ -124,11 +121,7 @@ async function main() {
     templatesDir: TEMPLATES_DIR,
     activeAgentsDir: path.join(ACTIVE_AGENTS_DIR, project.id),
     noConsolidate: values['no-consolidate'],
-    preview: project.preview || null,
-    broadcastPort: values['watch-port'] ? parseInt(values['watch-port'], 10)
-      : values.port ? parseInt(values.port, 10) : undefined,
-    reportStatus: values.status || false,
-    watch: values.watch || false
+    preview: project.preview || null
   };
 
   // Dispatch to command handler
@@ -183,16 +176,6 @@ async function main() {
       exitCode = await recoverCommand(project, config);
       break;
     }
-    case 'watch': {
-      const { watchCommand } = require('./commands/watch');
-      exitCode = await watchCommand(project, config);
-      break;
-    }
-    case 'report': {
-      const { reportCommand } = require('./commands/report');
-      exitCode = await reportCommand(project, config);
-      break;
-    }
     case 'security': {
       const { securityCommand } = require('./commands/security');
       const securityConfig = {
@@ -225,14 +208,12 @@ Commands:
   plan <project>                    Brain dump with Riley → specs → roadmap
   talk <project>                    Talk to Riley mid-project (update specs/roadmap)
   pair <project>                    Pair with Morgan to diagnose and fix issues
-  run <project>                     Execute roadmap (parallel agents)
+  run <project>                     Execute roadmap (Morgan CLI session)
   status <project>                 Show project progress, phases, consumption
   schedule <sub> <project>         Manage automated scheduling (install/remove/pause/resume/status/dry-run)
   cadence <sub> <project>          Run maintenance cadences (run/status)
   action <project>                 Resolve HUMAN-tagged roadmap items interactively
   recover <project>                Clean up orphaned worktrees, stale branches, inconsistent state
-  watch <project>                  Watch a running session in real time (connects to broadcast server)
-  report <project>                 Report a bug or request a feature (queued for between-phase processing)
   security <project>               Run a standalone security scan (Casey)
   api                               Start REST API server for programmatic access
   help                              Show this help message
@@ -252,10 +233,7 @@ Options:
   --type <type>            Cadence type for cadence run (weekly/monthly)
   --dry-run                Preview without making changes
   --no-consolidate         Skip auto-consolidation of session branch to main
-  --no-watch               Hide live agent activity (shown by default)
-  --watch-port <port>      Broadcast server port (default: 3100)
-  --port <port>            Port for watch command to connect to (default: 3100)
-  --status                 Show report queue status (for report command)
+  --port <port>            Port for api command (default: 3200)
   --focus <areas>          Security scan focus (comma-separated: secrets,deps,injection,auth,config)
   --timeout <minutes>      Security scan timeout in minutes (default: 5)
   --schedule <freq>        Schedule recurring security scans (weekly)
@@ -283,10 +261,6 @@ Examples:
   ./devshop cadence run my-app --type weekly
   ./devshop cadence run my-app --type monthly
   ./devshop cadence status my-app
-  ./devshop watch my-app
-  ./devshop watch my-app --port 3200
-  ./devshop report my-app
-  ./devshop report my-app --status
   ./devshop security my-app
   ./devshop security my-app --focus secrets,deps
   ./devshop security my-app --budget 5 --timeout 10

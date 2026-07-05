@@ -1,7 +1,7 @@
 # Spike Phases
 
 ## Purpose
-Provides a structured mechanism for investigating technical unknowns before committing to full implementation. When Riley identifies genuine uncertainty during kickoff (unfamiliar APIs, novel algorithms, architectural bets), she creates `[SPIKE]` items in a dedicated first phase. Morgan investigates each spike, produces findings, and the orchestrator auto-pauses for human review.
+Provides a structured mechanism for investigating technical unknowns before committing to full implementation. When Riley identifies genuine uncertainty during kickoff (unfamiliar APIs, novel algorithms, architectural bets), she creates `[SPIKE]` items in a dedicated first phase. Morgan investigates spikes himself during his run session and records findings before implementation phases begin.
 
 ## Status
 IMPLEMENTED
@@ -34,56 +34,15 @@ The system SHALL provide an `isSpikePhase(phase)` method that returns true when 
 - **WHEN** a phase has no pending items
 - **THEN** `isSpikePhase()` SHALL return `false`
 
-### Spike Execution
-The system SHALL execute `[SPIKE]` items using direct agent invocation (not the microcycle), running sequentially on the session branch without worktrees.
+### Spike Investigation by Morgan
+Spike items SHALL be investigated by Morgan (principal engineer) directly within his run session — not delegated to implementation sub-agents. The shared roadmap rules SHALL state that `[SPIKE]` items are investigated by Morgan.
 
-#### Scenario: Spike agent invocation
-- **WHEN** a `[SPIKE]` item is executed
-- **THEN** the orchestrator SHALL render the `spike-agent` system prompt with `SPIKE_ID` and `SPIKE_DESCRIPTION` variables, and invoke `agentRunner.runAgent()` with the `config.agents.spike` settings
-
-#### Scenario: Spike findings output
-- **WHEN** a spike investigation completes successfully
-- **THEN** the agent SHALL have produced `openspec/spikes/<spike-id>/findings.md` containing Question, Findings, Recommendation, and optional POC evidence
-
-#### Scenario: Spike item completion
-- **WHEN** a spike investigation succeeds
-- **THEN** the item SHALL be marked complete in the roadmap and findings committed to the session branch
-
-#### Scenario: Spike item failure
-- **WHEN** a spike investigation fails
-- **THEN** the item SHALL be parked with triage classification
-
-### Spike Phase Auto-Pause
-The system SHALL auto-pause after completing a spike-only phase with `stopReason: 'spike_review_pending'`.
-
-#### Scenario: Spike phase completion
-- **WHEN** a spike-only phase completes (all spike items executed)
-- **THEN** the orchestrator SHALL push the session branch, log a `spike_phase_complete` event, print spike findings paths to console, and complete the session with `stopReason: 'spike_review_pending'`
-
-#### Scenario: Resume after spike review
-- **WHEN** the user resumes with `--resume` after reviewing spike findings
-- **THEN** the orchestrator SHALL continue from the next phase (implementation phases)
-
-### Spike Items in Mixed Phases
-The system SHALL execute spike items before normal implementation items when both exist in the same phase.
-
-#### Scenario: Mixed phase execution order
-- **WHEN** a phase contains both `[SPIKE]` and non-spike pending items
-- **THEN** spike items SHALL be executed first via `_executeSpikeItems()`, then filtered out of group items before normal group execution proceeds
-
-### Spike Agent Template
-The system SHALL provide a `spike-agent` template with a system prompt focused on technical investigation.
-
-#### Scenario: Spike agent prompt content
-- **WHEN** the spike-agent system prompt is rendered
-- **THEN** it SHALL instruct Morgan to investigate a specific technical question, produce a findings.md file, and optionally create throwaway POC code
-
-#### Scenario: Spike agent config
-- **WHEN** the spike-agent config.json is read
-- **THEN** it SHALL contain `role: "spike"` and `name: "Morgan"`
+#### Scenario: Morgan investigates a spike
+- **WHEN** Morgan's run session reaches a `[SPIKE]` item
+- **THEN** Morgan SHALL investigate the technical question in-session and record findings before marking the item complete
 
 ### PM Spike Guidance
-Riley's kickoff and brain-dump prompts SHALL include guidance on when to create spike items and the `[SPIKE]` tag format.
+Riley's roadmap-authoring guidance (shared `roadmap-rules.md` partial) SHALL include when to create spike items and the `[SPIKE]` tag format.
 
 #### Scenario: Spike creation criteria
 - **WHEN** Riley evaluates project features for uncertainty

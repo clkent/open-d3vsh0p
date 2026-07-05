@@ -1,43 +1,43 @@
 # Project Health Check
 
 ## Purpose
-Provides a pre-work health check gate that verifies a project's baseline (tests pass, build succeeds) before dispatching agents, with automated repair via Morgan and interactive pair-mode fallback.
+Provides a preflight health check that verifies a project's baseline (tests pass, build succeeds) inside the `run` command before Morgan's CLI session spawns. A failing baseline never blocks the run — instead the failure output is injected into Morgan's prompt so repairing the baseline becomes his first task. Pair mode remains the interactive path for fixing a broken baseline by hand.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/health-checker.js` — health check runner with auto-detection and configurable commands
-- `platform/orchestrator/src/parallel-orchestrator.js` — orchestrator integration (`_runHealthCheckGate`, `_handleProjectRepair`, `_projectRepairPairFallback`)
-- `templates/agents/principal-engineer/project-repair-prompt.md` — Morgan's repair prompt template
+- `platform/orchestrator/src/quality/health-checker.js` — health check runner with auto-detection and configurable commands
+- `platform/orchestrator/src/commands/run.js` — `runPreflightHealthCheck()` preflight integration in the run command
+- `templates/agents/principal-engineer/run-prompt.md` — Morgan's run prompt template with the `{{HEALTH_STATUS}}` variable
 - `platform/orchestrator/config/defaults.json` — default health check configuration
 
 ## Requirements
 
 ### Health Check Execution
-The orchestrator SHALL execute a set of verification commands against the project after session branch creation and before dispatching any spec work to agents.
+The run command SHALL execute a set of verification commands against the project before spawning Morgan's CLI session.
 
-Each command SHALL be executed as a shell command in the project directory. The health check SHALL capture the exit code, stdout, and stderr of each command.
+Each command SHALL be executed as a shell command in the project directory with a clean environment. The health check SHALL capture the exit code, stdout, and stderr of each command.
 
 A command SHALL be considered passing if its exit code is 0, and failing if its exit code is non-zero or if execution times out.
 
 The health check SHALL be considered passing only if ALL configured commands pass. If any command fails, the health check SHALL be considered failing.
 
 #### Scenario: All health check commands pass
-- **WHEN** the orchestrator runs the health check and all configured commands exit with code 0
-- **THEN** the orchestrator SHALL proceed to `SELECTING_REQUIREMENT` and begin normal phase execution
+- **WHEN** the preflight health check runs and all configured commands exit with code 0
+- **THEN** the run command SHALL report the check as passed and spawn Morgan with no failure block in his prompt
 
 #### Scenario: One health check command fails
-- **WHEN** the orchestrator runs the health check and one command exits with a non-zero code
-- **THEN** the orchestrator SHALL capture the failing command's stdout and stderr and transition to `PROJECT_REPAIR`
+- **WHEN** the preflight health check runs and one command exits with a non-zero code
+- **THEN** the run command SHALL capture the failing command's stdout and stderr for injection into Morgan's prompt
 
 #### Scenario: Health check command times out
 - **WHEN** a health check command does not complete within the configured timeout
-- **THEN** the orchestrator SHALL kill the process, treat the command as failed, and transition to `PROJECT_REPAIR`
+- **THEN** the process SHALL be killed and the command treated as failed
 
 #### Scenario: Multiple commands with mixed results
 - **WHEN** the health check runs two commands and the first passes but the second fails
-- **THEN** the health check SHALL be considered failing, and the output of the failing command SHALL be captured for the repair flow
+- **THEN** the health check SHALL be considered failing, and the output of the failing command SHALL be captured for the prompt injection
 
 ### Health Check Command Configuration
 The health check commands SHALL be configurable per-project via the project configuration (`.devshop.json` or project registry entry) under a `healthCheck` field.
@@ -51,35 +51,35 @@ The configuration SHALL support:
 - `ios.scheme`: Override auto-detected iOS scheme name
 - `android.command`: Override default Android build command
 
-If no `healthCheck` configuration is provided, the orchestrator SHALL attempt auto-detection by reading the project's `package.json` (if present):
+If no `healthCheck` configuration is provided, the system SHALL attempt auto-detection by reading the project's `package.json` (if present):
 - If a `test` script exists, include `npm test`
 - If a `build` script exists, include `npm run build`
 
-Additionally, if `nativeBuild` is not explicitly set to `false`, the orchestrator SHALL auto-detect native projects:
+Additionally, if `nativeBuild` is not explicitly set to `false`, the system SHALL auto-detect native projects:
 - If `ios/Podfile` exists, include iOS build validation commands
 - If `android/build.gradle` or `android/build.gradle.kts` exists, include Android build validation commands
 
-If no `package.json` exists or it contains no `test` or `build` scripts, no native project markers are found, and no explicit configuration is provided, the orchestrator SHALL skip the health check and proceed normally.
+If no `package.json` exists or it contains no `test` or `build` scripts, no native project markers are found, and no explicit configuration is provided, the system SHALL skip the health check and proceed normally.
 
 #### Scenario: Explicit health check configuration
 - **WHEN** the project config contains `healthCheck.commands: ["pytest", "mypy src/"]`
-- **THEN** the orchestrator SHALL execute `pytest` and `mypy src/` as health check commands, ignoring any `package.json` auto-detection
+- **THEN** the system SHALL execute `pytest` and `mypy src/` as health check commands, ignoring any `package.json` auto-detection
 
 #### Scenario: Auto-detection from package.json
 - **WHEN** no `healthCheck` config exists and the project's `package.json` has `scripts.test: "jest"` and `scripts.build: "next build"`
-- **THEN** the orchestrator SHALL use `["npm test", "npm run build"]` as health check commands
+- **THEN** the system SHALL use `["npm test", "npm run build"]` as health check commands
 
 #### Scenario: Auto-detection with test only
 - **WHEN** no `healthCheck` config exists and the project's `package.json` has `scripts.test: "jest"` but no `scripts.build`
-- **THEN** the orchestrator SHALL use `["npm test"]` as the sole health check command
+- **THEN** the system SHALL use `["npm test"]` as the sole health check command
 
 #### Scenario: Auto-detection with React Native iOS project
 - **WHEN** no `healthCheck` config exists and the project has `package.json` with `scripts.test` and an `ios/Podfile`
-- **THEN** the orchestrator SHALL use `["npm test"]` plus iOS native build validation commands
+- **THEN** the system SHALL use `["npm test"]` plus iOS native build validation commands
 
 #### Scenario: No configuration and no package.json
 - **WHEN** no `healthCheck` config exists and no `package.json` is found in the project directory
-- **THEN** the orchestrator SHALL skip the health check entirely and proceed to phase execution
+- **THEN** the run command SHALL skip the health check entirely and spawn Morgan normally
 
 #### Scenario: Custom timeout
 - **WHEN** the project config contains `healthCheck.timeoutMs: 300000`
@@ -87,77 +87,55 @@ If no `package.json` exists or it contains no `test` or `build` scripts, no nati
 
 #### Scenario: Native build disabled via config
 - **WHEN** the project config contains `healthCheck.nativeBuild: false` and the project has an `ios/Podfile`
-- **THEN** the orchestrator SHALL NOT include iOS build validation commands in auto-detection
+- **THEN** the system SHALL NOT include iOS build validation commands in auto-detection
 
-### Health Check Runs Only on Fresh Sessions
-The health check SHALL run only on `--fresh` session starts. Resumed sessions (`--resume`) SHALL skip the health check.
+### Preflight Integration in the Run Command
+The `run` command SHALL call `runPreflightHealthCheck()` before rendering Morgan's orchestration prompt and spawning the CLI session.
 
-#### Scenario: Fresh session triggers health check
-- **WHEN** the orchestrator starts with `--fresh` and health check commands are configured or auto-detected
-- **THEN** the orchestrator SHALL run the health check before dispatching spec work
+On pass (or when no commands are configured), the preflight SHALL contribute an empty `HEALTH_STATUS` value and the run proceeds unchanged.
 
-#### Scenario: Resumed session skips health check
-- **WHEN** the orchestrator starts with `--resume` and an existing session state is found
-- **THEN** the orchestrator SHALL skip the health check and continue from the persisted state
+On failure, the preflight SHALL return a markdown block titled `## Pre-Run Health Check FAILED` containing each failing command, its exit code, and up to the last 2000 characters of its output, instructing Morgan to repair the build/tests and confirm the failing commands pass before starting any roadmap item.
 
-### Project Repair via Morgan
-When the health check fails, the orchestrator SHALL invoke Morgan (principal engineer) via `AgentSession.chat()` to attempt an automated repair.
+The failure block SHALL be injected into Morgan's run prompt via the `{{HEALTH_STATUS}}` template variable in `templates/agents/principal-engineer/run-prompt.md`. When a failure block exists, the initial prompt sent to Morgan (including on `--resume`) SHALL also instruct him to repair the baseline first.
 
-Morgan SHALL receive the full output (stdout + stderr) of all failing health check commands as context.
+If the preflight itself errors (e.g., config resolution fails), the run command SHALL log that the preflight was skipped and proceed normally.
 
-Morgan SHALL operate on the session branch (not main directly) to make repair changes.
+#### Scenario: Preflight failure injected into Morgan's prompt
+- **WHEN** the preflight health check fails before a run session
+- **THEN** the run command SHALL render Morgan's prompt with a `## Pre-Run Health Check FAILED` markdown block describing the failing commands, making baseline repair Morgan's first task
 
-After Morgan completes, the orchestrator SHALL re-run the full health check to verify the repair.
+#### Scenario: Preflight pass leaves prompt clean
+- **WHEN** the preflight health check passes
+- **THEN** `HEALTH_STATUS` SHALL render as empty and Morgan's prompt SHALL contain no repair instructions
 
-If the health check passes after Morgan's repair, the orchestrator SHALL commit Morgan's changes and proceed to `SELECTING_REQUIREMENT`.
+#### Scenario: Resumed session still receives repair instruction
+- **WHEN** `run --resume` is executed and the preflight health check fails
+- **THEN** the initial prompt sent to the resumed session SHALL instruct Morgan to repair the baseline before roadmap work
 
-If the health check fails after Morgan's repair, the orchestrator SHALL discard Morgan's changes (via `git checkout . && git clean -fd`) and proceed to pair-mode fallback.
+#### Scenario: Preflight error is non-fatal
+- **WHEN** `runPreflightHealthCheck()` throws while resolving config or running commands
+- **THEN** the run command SHALL print a skip notice and spawn Morgan without a failure block
 
-Morgan SHALL receive a single repair attempt. The orchestrator SHALL NOT retry Morgan on failure.
+### Health Check Never Blocks the Run
+A failing preflight health check SHALL NOT prevent Morgan's session from starting. The run command SHALL always proceed to spawn Morgan; repair happens inside the session.
 
-#### Scenario: Morgan successfully repairs the project
-- **WHEN** the health check fails and Morgan makes changes that cause all health check commands to pass on re-run
-- **THEN** the orchestrator SHALL commit Morgan's changes to the session branch, log the repair, and transition to `SELECTING_REQUIREMENT`
+Pair mode (`./devshop pair`) SHALL remain the interactive path for a user who prefers to diagnose and fix a broken baseline with Morgan directly.
 
-#### Scenario: Morgan cannot repair the project
-- **WHEN** the health check fails and Morgan's changes do not result in all health check commands passing
-- **THEN** the orchestrator SHALL discard Morgan's changes, log the failure, and transition to pair-mode fallback
+#### Scenario: Run proceeds despite failing baseline
+- **WHEN** the preflight health check fails
+- **THEN** the run command SHALL print that Morgan will repair the baseline first and continue spawning the session (no error exit)
 
-#### Scenario: Morgan's session errors out
-- **WHEN** Morgan's `AgentSession.chat()` throws an error
-- **THEN** the orchestrator SHALL log the error and proceed to pair-mode fallback without discarding any files (Morgan may not have made changes)
+#### Scenario: Interactive fix via pair mode
+- **WHEN** the user wants to fix a broken baseline interactively instead of letting a run session handle it
+- **THEN** the user MAY run `./devshop pair {project}` to work through the failures with Morgan
 
-### Pair-Mode Fallback for Failed Repair
-When Morgan cannot repair the project, the orchestrator SHALL drop into interactive pair mode, presenting the health check failure output to the user.
+### Health Check Console Output
+The run command SHALL print the preflight outcome to the console: a start notice when commands are about to run, a pass notice when all commands succeed, and a failure notice with the count of failing commands when any fail. The health checker SHALL print `health_check_warning` notices for skipped or unsafe commands (e.g., missing `xcodebuild`, unset `ANDROID_HOME`).
 
-The pair-mode prompt SHALL display:
-- Which health check commands failed
-- The captured output of each failing command
-- Instructions to fix the issues and exit pair mode
+#### Scenario: Pass is reported
+- **WHEN** all preflight commands pass
+- **THEN** the run command SHALL print `Health check passed.`
 
-After pair mode exits, the orchestrator SHALL re-run the health check. If it passes, the orchestrator SHALL proceed to `SELECTING_REQUIREMENT`. If it fails, the orchestrator SHALL transition to `SESSION_COMPLETE`.
-
-#### Scenario: User fixes the issue in pair mode
-- **WHEN** the user fixes the baseline in pair mode and the post-pair health check passes
-- **THEN** the orchestrator SHALL proceed to `SELECTING_REQUIREMENT` and begin normal spec work
-
-#### Scenario: User exits pair mode without fixing
-- **WHEN** the user exits pair mode and the post-pair health check still fails
-- **THEN** the orchestrator SHALL transition to `SESSION_COMPLETE` with reason `health_check_failed`
-
-### Health Check Logging
-The orchestrator SHALL log health check events with the following event types:
-- `health_check_started`: Logged when the health check begins, with the list of commands to run
-- `health_check_passed`: Logged when all commands pass
-- `health_check_failed`: Logged when any command fails, with the failing command and truncated output
-- `project_repair_started`: Logged when Morgan is invoked for repair
-- `project_repair_succeeded`: Logged when Morgan's repair passes the re-check
-- `project_repair_failed`: Logged when Morgan's repair does not pass the re-check
-
-#### Scenario: Health check pass is logged
-- **WHEN** all health check commands pass
-- **THEN** the orchestrator SHALL log `health_check_passed` with the number of commands run and total elapsed time
-
-#### Scenario: Health check failure is logged with output
-- **WHEN** a health check command fails
-- **THEN** the orchestrator SHALL log `health_check_failed` with the command string, exit code, and the first 2000 characters of stderr
+#### Scenario: Failure is reported with count
+- **WHEN** one or more preflight commands fail
+- **THEN** the run command SHALL print the number of failing commands and that Morgan will repair the baseline first

@@ -242,3 +242,50 @@ describe('run command — post-session roadmap diff', () => {
     assert.equal(2 > 0 && !true, false);  // items + flag set
   });
 });
+
+describe('runPreflightHealthCheck', () => {
+  const { runPreflightHealthCheck } = require('./run');
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'preflight-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns empty string when no health check commands resolve', async () => {
+    // Empty dir: no healthCheck config, no package.json → nothing to run
+    const result = await runPreflightHealthCheck(tmpDir, {});
+    assert.equal(result, '');
+  });
+
+  it('returns empty string when all commands pass', async () => {
+    const config = { healthCheck: { commands: ['true'] } };
+    const result = await runPreflightHealthCheck(tmpDir, config);
+    assert.equal(result, '');
+  });
+
+  it('returns failure block with command and exit code when a command fails', async () => {
+    const config = { healthCheck: { commands: ['node -e "process.exit(3)"'] } };
+    const result = await runPreflightHealthCheck(tmpDir, config);
+    assert.ok(result.includes('Pre-Run Health Check FAILED'));
+    assert.ok(result.includes('node -e "process.exit(3)"'));
+    assert.ok(/\(exit \d+\)/.test(result));
+    assert.ok(result.includes('FIRST task'));
+  });
+
+  it('includes only failing commands in the failure block', async () => {
+    const config = { healthCheck: { commands: ['true', 'false'] } };
+    const result = await runPreflightHealthCheck(tmpDir, config);
+    assert.ok(result.includes('### `false` (exit 1)'));
+    assert.ok(!result.includes('### `true`'));
+  });
+
+  it('never throws on resolver errors — returns empty string', async () => {
+    // Nonexistent dir makes auto-detection fail internally; must not throw
+    const result = await runPreflightHealthCheck(path.join(tmpDir, 'nope'), {});
+    assert.equal(result, '');
+  });
+});

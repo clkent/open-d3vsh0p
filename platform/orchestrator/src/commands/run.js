@@ -139,6 +139,9 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   console.log('=====================================');
   console.log('');
 
+  // Pre-run health check — if the baseline is broken, Morgan repairs it first
+  const healthStatus = await runPreflightHealthCheck(config.projectDir, fullConfig);
+
   // Build Morgan's orchestration prompt
   const templateEngine = new TemplateEngine(TEMPLATES_DIR);
 
@@ -173,6 +176,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     CONVENTIONS: conventions,
     BUDGET_USD: budgetUsd.toFixed(2),
     TIME_LIMIT_HOURS: timeLimitHours,
+    HEALTH_STATUS: healthStatus,
     AUTONOMOUS_MODE: autonomousMode
   };
 
@@ -199,9 +203,12 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   }
 
   // Build initial prompt
+  const repairFirst = healthStatus
+    ? 'The baseline health check FAILED — repair the build/tests described in your instructions FIRST, then '
+    : '';
   const initialPrompt = isAutonomous
-    ? 'Read the roadmap and start working through the pending items autonomously. Do not wait for input.'
-    : 'Read the roadmap and start working through the pending items. I can interact with you as you work.';
+    ? `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and start working through the pending items autonomously. Do not wait for input.`
+    : `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and start working through the pending items. I can interact with you as you work.`;
 
   console.log('  Spawning Morgan as orchestrator...');
   console.log('  Use Ctrl+C or /exit to end the session.');
@@ -216,7 +223,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     resume: resumeSessionId,
     name: `Morgan — ${config.projectId}`,
     initialPrompt: resumeSessionId
-      ? 'Continue working through the roadmap from where you left off. Check roadmap.md for pending items.'
+      ? `Continue working through the roadmap from where you left off. Check roadmap.md for pending items.${healthStatus ? `\n\n${healthStatus}` : ''}`
       : initialPrompt
   });
 
@@ -503,4 +510,50 @@ async function auditRoadmapCompletions(projectDir) {
   return { reconciled: fixedIds.length, items: fixedIds };
 }
 
-module.exports = { runCommand, auditRoadmapCompletions };
+/**
+ * Run the project's health check before spawning Morgan.
+ *
+ * Uses the project's `healthCheck` config (or auto-detection, including
+ * native builds) via health-checker. Never blocks the run: on failure it
+ * returns a markdown block for injection into Morgan's prompt so repairing
+ * the baseline becomes his first task; on pass or error it returns ''.
+ *
+ * @param {string} projectDir
+ * @param {object} fullConfig - Loaded config (reads fullConfig.healthCheck)
+ * @returns {Promise<string>} '' when healthy/skipped, markdown failure block otherwise
+ */
+async function runPreflightHealthCheck(projectDir, fullConfig) {
+  const { resolveHealthCheckConfig, runHealthCheck } = require('../quality/health-checker');
+  try {
+    const hcConfig = await resolveHealthCheckConfig(projectDir, fullConfig);
+    if (!hcConfig.commands || hcConfig.commands.length === 0) {
+      return '';
+    }
+    console.log('  Running pre-run health check...');
+    const result = await runHealthCheck(projectDir, hcConfig);
+    if (result.passed) {
+      console.log('  Health check passed.');
+      console.log('');
+      return '';
+    }
+    const failed = result.results.filter(r => r.exitCode !== 0);
+    console.log(`  Health check FAILED (${failed.length} command(s)) — Morgan will repair the baseline first.`);
+    console.log('');
+    const details = failed.map(r => {
+      const output = (r.stderr || r.stdout || '(no output)').slice(-2000);
+      return `### \`${r.command}\` (exit ${r.exitCode})\n\`\`\`\n${output}\n\`\`\``;
+    }).join('\n\n');
+    return [
+      '## Pre-Run Health Check FAILED',
+      '',
+      'The project baseline is broken. Before touching any roadmap item, your FIRST task is to repair the build/tests below, commit the fix, then re-run the failing commands to confirm they pass. Only then start roadmap work.',
+      '',
+      details
+    ].join('\n');
+  } catch (err) {
+    console.log(`  ~ [health_check] Preflight skipped: ${err.message}`);
+    return '';
+  }
+}
+
+module.exports = { runCommand, auditRoadmapCompletions, runPreflightHealthCheck };

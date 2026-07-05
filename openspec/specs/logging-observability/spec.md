@@ -7,7 +7,8 @@ Provides structured logging for orchestrator sessions via JSONL run logs and JSO
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/logger.js` -- Logger class with JSONL file logging, structured event methods, console output, and session summary generation
+- `platform/orchestrator/src/infra/logger.js` -- Logger class with JSONL file logging, structured event methods, console output, and session summary generation
+- `platform/orchestrator/src/quality/review-parser.js` -- ReviewParser used by the logger to aggregate review scores into summary metrics
 
 ## Requirements
 
@@ -65,7 +66,7 @@ The system SHALL print each log entry to the console with a level-appropriate ic
 - **THEN** the console output SHALL use the `!` icon prefix
 
 ### Session Summary JSON
-The system SHALL provide a `writeSummary(state)` method that writes a `{sessionId}-summary.json` file containing session metadata: `sessionId`, `projectId`, `startedAt`, `completedAt` (current time), `stopReason`, `totalCostUsd`, `totalDurationMs`, `agentInvocations`, `sessionBranch`, `results` (with `completed`, `parked`, `remaining` arrays), and `completedMicrocycles`.
+The system SHALL provide a `writeSummary(state)` method that writes a `{sessionId}-summary.json` file containing session metadata: `sessionId`, `projectId`, `startedAt`, `completedAt` (current time), `stopReason`, `totalCostUsd`, `totalDurationMs`, `agentInvocations`, `sessionBranch`, `results` (with `completed`, `parked`, `remaining` arrays), `completedMicrocycles`, `reviewMetrics` (aggregated via ReviewParser), `humanItems`, and `interventions`.
 
 #### Scenario: Summary on successful completion
 - **WHEN** writeSummary is called with state where pending is empty and inProgress is null
@@ -94,46 +95,8 @@ The system SHALL lazily initialize the log directory on first write. The `init()
 - **WHEN** `writeSummary()` is called before any prior init
 - **THEN** it SHALL call `init()` first to ensure the directory exists
 
-### Post-Session DevShop Commit
-After a session completes, changes to DevShop files (project-registry.json, session logs) SHALL be committed to the DevShop repo with a descriptive PR that identifies the project and summarizes what was accomplished.
-
-The PR title SHALL follow the format: `chore(<projectId>): session <sessionId> — <summary>`.
-
-The PR body SHALL include: project name and ID, session ID, list of completed requirement IDs with phase name, count of parked requirements, and total cost. This data SHALL be sourced from the session summary JSON at `active-agents/<projectId>/orchestrator/logs/<sessionId>-summary.json`.
-
-#### Scenario: Session completes with all requirements merged
-- **WHEN** a session completes with stopReason 'all_requirements_processed' and 3 completed requirements
-- **THEN** the DevShop PR body SHALL list all 3 requirement IDs under "Completed" and show "Parked: none"
-
-#### Scenario: Session completes with parked requirements
-- **WHEN** a session completes with 2 completed and 1 parked requirement
-- **THEN** the DevShop PR body SHALL list the 2 completed IDs and show "Parked: 1"
-
-#### Scenario: PR links to session summary
-- **WHEN** the DevShop commit includes changes to `active-agents/`
-- **THEN** the PR body SHALL reference the session summary log path so the full details can be reviewed
-
-### Broadcast Emitter Integration
-The Logger SHALL accept an optional `broadcastFn` during construction or via a `setBroadcast(fn)` method.
-
-When `broadcastFn` is set, every `log()` call SHALL invoke `broadcastFn` with a structured event containing the log level, event type, and data — in addition to writing to the JSONL file and console.
-
-The broadcast call SHALL be fire-and-forget (non-blocking, errors silently caught) so that broadcast failures never affect logging.
-
-#### Scenario: Logger emits to broadcast on log()
-- **WHEN** `log('info', 'phase_started', { phase: 'Phase 1' })` is called and a broadcastFn is set
-- **THEN** the broadcastFn SHALL be called with `{ level: 'info', eventType: 'phase_started', data: { phase: 'Phase 1' } }` and the JSONL file SHALL still be written normally
-
-#### Scenario: Broadcast not configured
-- **WHEN** `log()` is called and no broadcastFn has been set
-- **THEN** the logger SHALL write to JSONL and console as normal with no broadcast call
-
-#### Scenario: Broadcast error is non-fatal
-- **WHEN** broadcastFn throws an error during a log() call
-- **THEN** the JSONL write and console output SHALL still complete successfully
-
 ### Milestone Logging
-The Logger SHALL provide a `logMilestone(data)` method that logs a milestone event at level `info` with event type `milestone`. The data object SHALL include `requirementId`, `result`, `persona`, `group`, `attempts`, `costUsd`, `diffStat`, `reviewSummary`, `previewAvailable`, and `progress` fields. The milestone event SHALL be broadcast via the broadcastFn if configured. Console output for milestone events SHALL use a distinct format: `  * [milestone] <requirementId> <result>` using `*` as the icon to distinguish milestones from regular log entries.
+The Logger SHALL provide a `logMilestone(data)` method that logs a milestone event at level `info` with event type `milestone`. The data object SHALL include `requirementId`, `result`, and progress-related fields such as `attempts`, `costUsd`, and `progress`. Console output for milestone events SHALL use a distinct format: `  * [milestone] <requirementId> <result>` using `*` as the icon to distinguish milestones from regular log entries.
 
 #### Scenario: Milestone logged for merged requirement
 - **WHEN** `logMilestone({ requirementId: 'user-auth', result: 'merged', persona: 'Taylor', attempts: 2, costUsd: 3.50, progress: { completed: 3, total: 7, parked: 0 } })` is called
@@ -143,10 +106,6 @@ The Logger SHALL provide a `logMilestone(data)` method that logs a milestone eve
 - **WHEN** `logMilestone({ requirementId: 'payment-flow', result: 'parked', ... })` is called
 - **THEN** the JSONL entry SHALL have `level: 'warn'` (parked is a warning) and the console SHALL output `  ~ [milestone] payment-flow parked`
 
-#### Scenario: Milestone broadcast
-- **WHEN** `logMilestone()` is called with a broadcastFn configured
-- **THEN** the broadcastFn SHALL be called with `{ level, eventType: 'milestone', data }` which the broadcast server wraps in a standard envelope
-
 ### Progress Logging
 The Logger SHALL provide a `logProgress(data)` method that logs a progress event at level `info` with event type `progress`. The data object SHALL include `phase`, `completed`, `total`, `parked`, `budgetUsedUsd`, `budgetLimitUsd`, `elapsedMinutes`, and `activeAgents`. Console output for progress events SHALL use the format: `  [progress] <phase> | <completed>/<total> | $<used>/$<limit> | <elapsed>m`.
 
@@ -154,17 +113,9 @@ The Logger SHALL provide a `logProgress(data)` method that logs a progress event
 - **WHEN** `logProgress({ phase: 'Phase 2: UI', completed: 2, total: 5, budgetUsedUsd: 6.30, budgetLimitUsd: 30, elapsedMinutes: 12 })` is called
 - **THEN** a JSONL entry SHALL be written with event `progress` and the console SHALL output `  [progress] Phase 2: UI | 2/5 | $6.30/$30.00 | 12m`
 
-#### Scenario: Progress broadcast
-- **WHEN** `logProgress()` is called with a broadcastFn configured
-- **THEN** the broadcastFn SHALL be called with `{ level: 'info', eventType: 'progress', data }` for broadcast to WebSocket clients
-
 ### Go-Look Logging
-The Logger SHALL provide a `logGoLook(data)` method that logs a go_look event at level `info` with event type `go_look`. The data object SHALL include `requirementId`, `previewCommand`, `previewPort`, and `message`. Console output for go_look events SHALL use a prominent format: `  >>> <message>` matching the watch command's display.
+The Logger SHALL provide a `logGoLook(data)` method that logs a go_look event at level `info` with event type `go_look`. The data object SHALL include `requirementId`, `previewCommand`, `previewPort`, and `message`. Console output for go_look events SHALL use a prominent format: `  >>> <message>`.
 
 #### Scenario: Go-look event logged
 - **WHEN** `logGoLook({ requirementId: 'nav-bar', previewPort: 3000, message: 'nav-bar merged — refresh localhost:3000' })` is called
 - **THEN** a JSONL entry SHALL be written with event `go_look` and the console SHALL output `  >>> nav-bar merged — refresh localhost:3000`
-
-#### Scenario: Go-look broadcast
-- **WHEN** `logGoLook()` is called with a broadcastFn configured
-- **THEN** the broadcastFn SHALL be called with `{ level: 'info', eventType: 'go_look', data }` for broadcast to WebSocket clients

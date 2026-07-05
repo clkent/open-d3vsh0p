@@ -1,13 +1,14 @@
 # Git Workflow
 
 ## Purpose
-Manages all git operations for the orchestrator, including session and work branch creation, commits, merges, diffs, and worktree management for parallel execution.
+Manages all git operations for the orchestrator, including session and work branch creation, commits, merges, diffs, worktree management, and consolidation of session branches to main.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/git-ops.js` — git command execution, branch management, commit/merge operations, diff retrieval, and worktree lifecycle
+- `platform/orchestrator/src/git/git-ops.js` — git command execution, branch management, commit/merge operations, diff retrieval, worktree lifecycle, and consolidation
+- `platform/orchestrator/src/git/recovery-manager.js` — cleanup of orphaned worktrees, stale branches, and inconsistent state (used by the recover command)
 
 ## Requirements
 
@@ -87,7 +88,7 @@ The system SHALL retrieve diffs and logs using three-dot syntax with a fallback 
 - **THEN** the system SHALL run `git log --oneline {baseBranch}..HEAD` (two-dot) and return the output, or return an empty string on failure
 
 ### Worktree Support
-The system SHALL manage git worktrees for parallel execution, supporting creation, removal, and listing.
+The system SHALL manage git worktrees, supporting creation, removal, and listing (used by recovery tooling and available to session workflows).
 
 #### Scenario: Create worktree from existing branch
 - **WHEN** `createWorktree(projectDir, worktreePath, branchName)` is called
@@ -112,28 +113,22 @@ The system SHALL manage git worktrees for parallel execution, supporting creatio
 ### Push to Remote
 The system SHALL support pushing branches to the remote origin via `pushBranch(projectDir, branchName)`.
 
-The orchestrator SHALL push the session branch after each phase completes and at session end, so progress is visible on GitHub. Push failures SHALL be caught and logged as warnings without crashing the session.
-
-After the final session-end push, the system SHALL attempt auto-consolidation to main (unless `--no-consolidate` is set). See the Session Consolidation requirement for details.
+After Morgan's session exits, the run command SHALL attempt auto-consolidation to main when items were completed (unless `--no-consolidate` is set), which pushes the session branch as part of the flow. See the Session Consolidation requirement for details. Push failures SHALL be caught and logged as warnings without crashing the session.
 
 #### Scenario: Push session branch
 - **WHEN** `pushBranch(projectDir, branchName)` is called
 - **THEN** the system SHALL run `git push -u origin {branchName}` and log the push
 
-#### Scenario: Push after phase completion
-- **WHEN** a phase completes and at least one requirement has been completed in the session
-- **THEN** the orchestrator SHALL call `pushBranch` with the session branch
-
 #### Scenario: Push failure is non-fatal
 - **WHEN** `pushBranch` fails (e.g. no remote, network error)
-- **THEN** the orchestrator SHALL log a warning with the error message and continue execution
+- **THEN** the system SHALL log a warning with the error message and continue execution
 
 #### Scenario: Skip push with no completed work
 - **WHEN** the session has zero completed requirements
-- **THEN** the push SHALL be skipped (nothing useful to push)
+- **THEN** consolidation (and its push) SHALL be skipped (nothing useful to push)
 
 ### Session Consolidation
-The system SHALL automatically consolidate completed session branches to main at session end by creating a pull request and merging it.
+The system SHALL automatically consolidate completed session branches to main after Morgan's session exits by creating a pull request and merging it.
 
 The consolidation SHALL only occur when the session has at least one completed requirement.
 
