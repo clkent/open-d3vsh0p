@@ -104,7 +104,7 @@
 ### Group B: Real-time
 - [x] `live-broadcast` — WebSocket broadcast server, stream-json agent output, watch command
 - [x] `session-progress-visibility` — Milestone notifications, progress line, "go look" alerts in watch command
-- [ ] `realtime-updates` — Web dashboard, agent activity visualization (depends on live-broadcast)
+- [x] `inline-watch-mode` — `--watch` flag showing live agent activity inline during run, shared event formatter extracted from watch command
 
 ## Phase VIII: Roadmap Integrity
 <!-- depends: Phase VI -->
@@ -184,17 +184,12 @@
 ### Group A: Native Build Detection
 - [x] `native-build-validation` — Auto-detect iOS/Android projects and add native build validation (xcodebuild, Gradle) to health check gate; introduces shared `detectProjectType` infrastructure
 
-### Group B: Quality Gates
-<!-- depends: Phase XIII Group A -->
-- [ ] `post-merge-build-gate` — Run full build validation (JS + native) after each merge instead of tests-only; uses shared project-type detection for command selection and per-command timeouts
-- [ ] `code-quality-lint-gate` — Grep-based code quality checks (console.log, debugger, .bak files, debug UI) with project-type-aware default rules; advisory at review, warning at phase gate
-
 ## Phase XIV: Runtime Intervention
 <!-- depends: Phase IX -->
 
 ### Group A: Intervention Classification
-- [ ] `runtime-human-intervention` — Classify parked items as human-needed vs code-bug, generate actionable instructions, update roadmap, surface in action command
-- [ ] `human-prerequisite-blocking` — Block orchestrator on prerequisite HUMAN items (non-Group-Z), pause for human action before dependent phases start
+- [x] `runtime-human-intervention` — Classify parked items as human-needed vs code-bug, generate actionable instructions, update roadmap, surface in action command
+- [x] `human-prerequisite-blocking` — Block orchestrator on prerequisite HUMAN items (non-Group-Z), pause for human action before dependent phases start
 
 ## Phase XV: Interactive Agent Sessions
 <!-- depends: Phase XI -->
@@ -206,13 +201,4 @@
 <!-- depends: Phase XV -->
 
 ### Group A: Morgan Run Mode
-- [ ] `morgan-orchestrator` — Replace SDK-based isolated agent spawning in `run` command with Morgan as a persistent CLI session that reads the roadmap, implements items sequentially, and delegates to sub-agents for parallel groups
-
-## Phase XVII: Figma Design Workflow
-<!-- depends: Phase IX -->
-
-### Group A: Design Foundations
-- [ ] `design-tokens` — Canonical design token generation at kickoff, tech-stack-specific compilation, token injection into agent prompts
-
-### Group B: Figma Integration
-- [ ] `figma-design-workflow` — Design capture command, Figma MCP client, snapshot system, design reconciliation with Riley
+- [x] `morgan-orchestrator` — Replace SDK-based isolated agent spawning in `run` command with Morgan as a persistent CLI session that reads the roadmap, implements items sequentially, and delegates to sub-agents for parallel groups
