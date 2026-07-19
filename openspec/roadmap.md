@@ -217,3 +217,9 @@
 <!-- depends: Phase XVII Group A -->
 - [ ] `scheduled-terminal-run` — Scheduled windows open a real Terminal window instead of running headless: `schedule install` generates a `.command` wrapper per run window and the launchd plist invokes `open -a Terminal <wrapper>.command`, giving the scheduled run a real TTY so the identical interactive Morgan flow (health gates, time limit, consolidation) runs unchanged; wrapper exits cleanly to allow window auto-close; macOS-only (cron fallback keeps direct invocation and is documented as unsupported for run windows)
 - [ ] `scheduling-e2e-validation` — [HUMAN] Full end-to-end test of the never-yet-used scheduling subsystem (after `scheduled-terminal-run`): `schedule install` → launchd plist fires → Terminal window opens with `run --window night` → autonomous Morgan session → post-session health gate → consolidation → morning digest; verify first-fire permissions, behavior while screen-locked, and pause/resume/remove lifecycle
+
+## Phase XVIII: Usage-Limit Resilience
+<!-- depends: Phase XVII Group A -->
+
+### Group A: Auto-Resume
+- [ ] `limit-aware-resume` — When Morgan exits early because the account usage limit was hit, `run` detects it via a cheap availability probe, polls until the limit window resets, then respawns Morgan with `--resume` (context intact); respects time limit / window end, caps resume attempts, and can be disabled with `--no-auto-resume`
