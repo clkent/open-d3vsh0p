@@ -1,6 +1,5 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { CostEstimator } = require('../session/cost-estimator');
 
 async function statusCommand(project, config) {
   const orchestratorDir = path.join(config.activeAgentsDir, 'orchestrator');
@@ -33,47 +32,6 @@ async function statusCommand(project, config) {
   } catch {
     console.log('  Session:   No active session');
     console.log('');
-  }
-
-  // Try to read latest summary
-  const logsDir = path.join(orchestratorDir, 'logs');
-  try {
-    const files = await fs.readdir(logsDir);
-    const summaries = files.filter(f => f.endsWith('-summary.json')).sort();
-    if (summaries.length > 0) {
-      const latest = summaries[summaries.length - 1];
-      const raw = await fs.readFile(path.join(logsDir, latest), 'utf-8');
-      const summary = JSON.parse(raw);
-      printLastSession(summary);
-    }
-  } catch {
-    // No logs directory yet
-  }
-
-  // Cost estimate for remaining work
-  try {
-    const logsDir = path.join(orchestratorDir, 'logs');
-    const costEstimator = new CostEstimator(logsDir);
-    await costEstimator.init();
-
-    if (costEstimator.sessionCount >= 1 && hasRoadmap) {
-      const { RoadmapReader } = require('../roadmap/roadmap-reader');
-      const roadmapReader = new RoadmapReader(project.projectDir);
-      const roadmap = await roadmapReader.parse();
-      const pendingCount = roadmapReader.getAllItems(roadmap)
-        .filter(i => i.status === 'pending').length;
-
-      if (pendingCount > 0) {
-        const avgCost = costEstimator.getAverageCostPerRequirement();
-        const totalEstimate = Math.round(pendingCount * avgCost * 100) / 100;
-        console.log('  Cost Estimate:');
-        console.log(`    Avg cost/req: $${avgCost.toFixed(2)} (from ${costEstimator.sessionCount} session(s))`);
-        console.log(`    Remaining:    $${totalEstimate.toFixed(2)} est. (${pendingCount} pending items)`);
-        console.log('');
-      }
-    }
-  } catch {
-    // Non-fatal
   }
 
   console.log('================================');
@@ -148,21 +106,6 @@ function printSessionState(state) {
   }
 
   console.log('');
-}
-
-function printLastSession(summary) {
-  console.log('  Last Session:');
-  console.log(`    ID:        ${summary.sessionId}`);
-  console.log(`    Cost:      $${(summary.totalCostUsd || 0).toFixed(2)}`);
-  console.log(`    Completed: ${summary.results.completed.length}`);
-  console.log(`    Parked:    ${summary.results.parked.length}`);
-  console.log(`    Remaining: ${summary.results.remaining.length}`);
-  console.log('');
-
-  // Review metrics from session
-  if (summary.reviewMetrics && summary.reviewMetrics.structuredReviews > 0) {
-    printReviewMetrics(summary.reviewMetrics);
-  }
 }
 
 function printReviewMetrics(metrics) {

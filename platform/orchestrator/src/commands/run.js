@@ -5,9 +5,7 @@ const { RoadmapReader } = require('../roadmap/roadmap-reader');
 const { GitOps } = require('../git/git-ops');
 const { TemplateEngine } = require('../agents/template-engine');
 const { resolveScheduleConfig, getWindowConfig, computeWindowEndTimeMs, VALID_WINDOWS } = require('../scheduler/window-config');
-const { CostEstimator } = require('../session/cost-estimator');
 const { generateSessionId } = require('../session/session-utils');
-const { getOrchestratorPaths } = require('../session/path-utils');
 const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
 const { loadConfig } = require('../infra/config');
 
@@ -37,11 +35,6 @@ async function runCommand(project, config, registry, saveRegistry) {
     // Morning window triggers digest, not a run
     if (windowName === 'morning' || winConfig.action === 'digest') {
       return await handleMorningDigest(project, config);
-    }
-
-    // Tech debt window runs security + PE instead of normal run
-    if (windowName === 'techdebt') {
-      return await handleTechDebt(project, config);
     }
 
     // Apply window budget/time unless CLI explicitly overrode
@@ -92,6 +85,14 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   const preCompleteCount = roadmapReader.getAllItems(preRoadmap)
     .filter(i => i.status === 'complete').length;
 
+  // Snapshot HEAD before the session (to detect whether Morgan committed work)
+  let preHeadSha = null;
+  try {
+    const { execFile: execFileAsync } = require('../infra/exec-utils');
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: config.projectDir });
+    preHeadSha = stdout.trim();
+  } catch { /* not a git repo or no commits yet */ }
+
   // Print session header
   const budgetUsd = config.budgetLimitUsd;
   const timeLimitHours = (config.timeLimitMs / 3600000).toFixed(1);
@@ -116,28 +117,11 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     console.log(`  Resume:     yes`);
   }
 
-  // Show estimated cost from historical data
-  try {
-    const { logsDir } = getOrchestratorPaths(config);
-    const costEstimator = new CostEstimator(logsDir);
-    await costEstimator.init();
-
-    if (costEstimator.sessionCount >= 1) {
-      const roadmap = await roadmapReader.parse();
-      const pendingCount = roadmapReader.getAllItems(roadmap)
-        .filter(i => i.status === 'pending').length;
-
-      if (pendingCount > 0) {
-        const prediction = costEstimator.predictSufficiency(budgetUsd, pendingCount);
-        console.log(`  Estimate:   $${prediction.estimatedCost.toFixed(2)} (${pendingCount} pending, confidence: ${prediction.confidence})`);
-      }
-    }
-  } catch {
-    // Non-fatal — skip estimate display
-  }
-
   console.log('=====================================');
   console.log('');
+
+  // Pre-run health check — if the baseline is broken, Morgan repairs it first
+  const healthStatus = await runPreflightHealthCheck(config.projectDir, fullConfig);
 
   // Build Morgan's orchestration prompt
   const templateEngine = new TemplateEngine(TEMPLATES_DIR);
@@ -173,6 +157,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     CONVENTIONS: conventions,
     BUDGET_USD: budgetUsd.toFixed(2),
     TIME_LIMIT_HOURS: timeLimitHours,
+    HEALTH_STATUS: healthStatus,
     AUTONOMOUS_MODE: autonomousMode
   };
 
@@ -199,9 +184,12 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   }
 
   // Build initial prompt
+  const repairFirst = healthStatus
+    ? 'The baseline health check FAILED — repair the build/tests described in your instructions FIRST, then '
+    : '';
   const initialPrompt = isAutonomous
-    ? 'Read the roadmap and start working through the pending items autonomously. Do not wait for input.'
-    : 'Read the roadmap and start working through the pending items. I can interact with you as you work.';
+    ? `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and start working through the pending items autonomously. Do not wait for input.`
+    : `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and start working through the pending items. I can interact with you as you work.`;
 
   console.log('  Spawning Morgan as orchestrator...');
   console.log('  Use Ctrl+C or /exit to end the session.');
@@ -216,7 +204,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     resume: resumeSessionId,
     name: `Morgan — ${config.projectId}`,
     initialPrompt: resumeSessionId
-      ? 'Continue working through the roadmap from where you left off. Check roadmap.md for pending items.'
+      ? `Continue working through the roadmap from where you left off. Check roadmap.md for pending items.${healthStatus ? `\n\n${healthStatus}` : ''}`
       : initialPrompt
   });
 
@@ -236,6 +224,22 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
 
   // Save session for resume
   await saveCliSession(stateDir, claudeSessionId || resumeSessionId, 'run');
+
+  // Post-session health check — catch anything broken that Morgan missed.
+  // Only runs when the session actually changed the project (commits or
+  // uncommitted edits). On failure, Morgan is re-entered to repair (bounded);
+  // if it still fails, consolidation to main is skipped.
+  let healthFailed = false;
+  const sessionDidWork = await didSessionChangeProject(config.projectDir, preHeadSha);
+  if (sessionDidWork) {
+    healthFailed = !(await verifyPostSessionHealth({
+      projectDir: config.projectDir,
+      fullConfig,
+      model: morganConfig.model,
+      resumeSessionId: claudeSessionId || resumeSessionId,
+      projectId: config.projectId
+    }));
+  }
 
   // Post-session: detect completed work
   const postRoadmap = await roadmapReader.parse();
@@ -289,8 +293,17 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     }, windowName);
   }
 
-  // Auto-consolidate session branch to main
-  if (itemsCompleted > 0 && !config.noConsolidate) {
+  // Auto-consolidate session branch to main — never with a failing health check
+  if (healthFailed) {
+    console.log('=== Consolidation Skipped ===');
+    console.log('  The post-session health check is failing — the session branch');
+    console.log('  will NOT be consolidated to main.');
+    console.log(`  Fix interactively with: ./devshop pair ${config.projectId}`);
+    console.log(`  Then consolidate with:  ./devshop run ${config.projectId} --resume`);
+    console.log('=============================');
+    console.log('');
+  }
+  if (itemsCompleted > 0 && !config.noConsolidate && !healthFailed) {
     try {
       // Commit any uncommitted changes Morgan left
       const { execFile: execFileAsync } = require('../infra/exec-utils');
@@ -305,7 +318,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
       const currentBranch = branchName.trim();
 
       if (currentBranch && currentBranch !== 'main') {
-        const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+        const logger = { log: async () => {}, logCommit: async () => {} };
         const gitOps = new GitOps(logger);
         await gitOps.consolidateToMain(config.projectDir, currentBranch, {
           sessionId,
@@ -341,19 +354,30 @@ async function handleMorningDigest(project, config) {
   console.log('======================');
   console.log('');
 
-  const { SessionAggregator } = require('../api/session-aggregator');
   const { GitHubNotifier } = require('../runners/github-notifier');
 
-  const { logsDir: logDir } = getOrchestratorPaths(config);
-  const aggregator = new SessionAggregator(logDir);
-  const summary = await aggregator.getMostRecentSummary();
-
-  if (!summary) {
-    console.log('  No recent session found for digest.');
+  // Build the digest from the current roadmap state (session summaries are
+  // no longer generated — Morgan's CLI sessions produce commits, not summaries)
+  const roadmapReader = new RoadmapReader(config.projectDir);
+  if (!(await roadmapReader.exists())) {
+    console.log('  No roadmap found for digest.');
     return 0;
   }
 
-  summary.window = 'morning-digest';
+  const roadmap = await roadmapReader.parse();
+  const items = roadmapReader.getAllItems(roadmap);
+  const summary = {
+    sessionId: generateSessionId('digest'),
+    window: 'morning-digest',
+    totalCostUsd: 0,
+    agentInvocations: 0,
+    results: {
+      completed: items.filter(i => i.status === 'complete').map(i => i.id),
+      parked: items.filter(i => i.status === 'parked').map(i => i.id),
+      remaining: items.filter(i => i.status === 'pending').map(i => i.id)
+    },
+    stopReason: 'morning_digest'
+  };
 
   const notifier = new GitHubNotifier(project.projectDir, project.name);
   const issueNumber = await notifier.postDailyDigest(summary);
@@ -363,48 +387,6 @@ async function handleMorningDigest(project, config) {
   }
 
   return 0;
-}
-
-async function handleTechDebt(project, config) {
-  const lockPath = path.join(config.activeAgentsDir, 'orchestrator', LOCK_FILE_NAME);
-  const lockAcquired = await acquireRunLock(lockPath);
-  if (!lockAcquired) {
-    console.error('Another run is already in progress for this project.');
-    return 1;
-  }
-
-  try {
-    const { TechDebtRunner } = require('../runners/tech-debt-runner');
-    const fullConfig = await loadConfig(config);
-    const runner = new TechDebtRunner({ ...fullConfig, ...config });
-    const result = await runner.run();
-
-    const { GitHubNotifier } = require('../runners/github-notifier');
-    const notifier = new GitHubNotifier(project.projectDir, project.name);
-
-    const digestSummary = {
-      sessionId: generateSessionId('techdebt'),
-      window: 'techdebt',
-      totalCostUsd: result.totalCost,
-      agentInvocations: 2,
-      results: {
-        completed: [],
-        parked: [],
-        remaining: []
-      },
-      stopReason: 'tech_debt_complete'
-    };
-
-    if (result.securityResult?.output) {
-      digestSummary.securityFindings = result.securityResult.output.substring(0, 2000);
-    }
-
-    await notifier.postDailyDigest(digestSummary);
-
-    return 0;
-  } finally {
-    await releaseRunLock(lockPath);
-  }
 }
 
 async function postRunDigest(project, config, result, windowName) {
@@ -474,7 +456,7 @@ async function auditRoadmapCompletions(projectDir) {
   const reader = new RoadmapReader(projectDir);
   if (!await reader.exists()) return { reconciled: 0, items: [] };
 
-  const logger = { log: async () => {}, logCommit: async () => {}, logMerge: async () => {} };
+  const logger = { log: async () => {}, logCommit: async () => {} };
   const gitOps = new GitOps(logger);
 
   const { stdout } = await gitOps._git(projectDir, ['log', '--oneline', 'main']);
@@ -503,4 +485,156 @@ async function auditRoadmapCompletions(projectDir) {
   return { reconciled: fixedIds.length, items: fixedIds };
 }
 
-module.exports = { runCommand, auditRoadmapCompletions };
+/**
+ * Run the project's health check and return a structured report.
+ *
+ * Uses the project's `healthCheck` config (or auto-detection, including
+ * native builds) via health-checker. Never throws.
+ *
+ * @param {string} projectDir
+ * @param {object} fullConfig - Loaded config (reads fullConfig.healthCheck)
+ * @returns {Promise<{ ran: boolean, passed: boolean, failureDetails: string }>}
+ *   ran=false when no commands resolve or the checker errored (treated as pass);
+ *   failureDetails is a markdown block of failing commands (empty when passed)
+ */
+async function runHealthCheckReport(projectDir, fullConfig) {
+  const { resolveHealthCheckConfig, runHealthCheck } = require('../quality/health-checker');
+  try {
+    const hcConfig = await resolveHealthCheckConfig(projectDir, fullConfig);
+    if (!hcConfig.commands || hcConfig.commands.length === 0) {
+      return { ran: false, passed: true, failureDetails: '' };
+    }
+    const result = await runHealthCheck(projectDir, hcConfig);
+    if (result.passed) {
+      return { ran: true, passed: true, failureDetails: '' };
+    }
+    const failed = result.results.filter(r => r.exitCode !== 0);
+    const failureDetails = failed.map(r => {
+      const output = (r.stderr || r.stdout || '(no output)').slice(-2000);
+      return `### \`${r.command}\` (exit ${r.exitCode})\n\`\`\`\n${output}\n\`\`\``;
+    }).join('\n\n');
+    return { ran: true, passed: false, failureDetails };
+  } catch (err) {
+    console.log(`  ~ [health_check] Skipped: ${err.message}`);
+    return { ran: false, passed: true, failureDetails: '' };
+  }
+}
+
+/**
+ * Run the project's health check before spawning Morgan.
+ *
+ * Never blocks the run: on failure it returns a markdown block for injection
+ * into Morgan's prompt so repairing the baseline becomes his first task;
+ * on pass or error it returns ''.
+ *
+ * @param {string} projectDir
+ * @param {object} fullConfig
+ * @returns {Promise<string>} '' when healthy/skipped, markdown failure block otherwise
+ */
+async function runPreflightHealthCheck(projectDir, fullConfig) {
+  console.log('  Running pre-run health check...');
+  const report = await runHealthCheckReport(projectDir, fullConfig);
+  if (!report.ran) {
+    return '';
+  }
+  if (report.passed) {
+    console.log('  Health check passed.');
+    console.log('');
+    return '';
+  }
+  console.log('  Health check FAILED — Morgan will repair the baseline first.');
+  console.log('');
+  return [
+    '## Pre-Run Health Check FAILED',
+    '',
+    'The project baseline is broken. Before touching any roadmap item, your FIRST task is to repair the build/tests below, commit the fix, then re-run the failing commands to confirm they pass. Only then start roadmap work.',
+    '',
+    report.failureDetails
+  ].join('\n');
+}
+
+/**
+ * Detect whether Morgan's session changed the project: new commits since
+ * the pre-session HEAD, or uncommitted working-tree changes.
+ */
+async function didSessionChangeProject(projectDir, preHeadSha) {
+  const { execFile: execFileAsync } = require('../infra/exec-utils');
+  try {
+    const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: projectDir });
+    if (status.trim()) return true;
+    const { stdout: head } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: projectDir });
+    return head.trim() !== preHeadSha;
+  } catch {
+    return true; // can't tell — err on the side of checking
+  }
+}
+
+/** Max times Morgan is re-entered to repair a failing post-session health check. */
+const MAX_REPAIR_ATTEMPTS = 2;
+/** Time cap per repair session. */
+const REPAIR_TIME_LIMIT_MS = 15 * 60 * 1000;
+
+/**
+ * Verify project health after Morgan's session ends — the closing gate that
+ * catches anything broken that Morgan didn't notice during the session.
+ *
+ * On failure, resumes Morgan's session with the failure output so he can
+ * repair it, up to MAX_REPAIR_ATTEMPTS times (each capped at
+ * REPAIR_TIME_LIMIT_MS). Returns true when healthy (or no checks resolve),
+ * false when the health check is still failing after all repair attempts.
+ */
+async function verifyPostSessionHealth({ projectDir, fullConfig, model, resumeSessionId, projectId }) {
+  for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
+    console.log('');
+    console.log('  Running post-session health check...');
+    const report = await runHealthCheckReport(projectDir, fullConfig);
+
+    if (!report.ran || report.passed) {
+      if (report.ran) console.log('  Post-session health check passed.');
+      return true;
+    }
+
+    if (attempt === MAX_REPAIR_ATTEMPTS) {
+      console.log('  Post-session health check still FAILING after repair attempts.');
+      return false;
+    }
+
+    console.log(`  Post-session health check FAILED — re-entering Morgan to repair (attempt ${attempt + 1}/${MAX_REPAIR_ATTEMPTS}).`);
+    console.log('');
+
+    const repairPrompt = [
+      'The post-session health check FAILED — something in the project broke during this session.',
+      'Investigate and fix the failures below, commit the fix, and re-run the failing commands to confirm they pass. Do not start new roadmap work.',
+      '',
+      report.failureDetails
+    ].join('\n');
+
+    const { promise, proc } = spawnClaudeTerminal({
+      projectDir,
+      resume: resumeSessionId,
+      model,
+      name: `Morgan (repair) — ${projectId}`,
+      initialPrompt: repairPrompt
+    });
+
+    const timer = setTimeout(() => {
+      console.log('');
+      console.log('  === Repair time limit reached — stopping Morgan ===');
+      proc.kill('SIGTERM');
+    }, REPAIR_TIME_LIMIT_MS);
+
+    await promise;
+    clearTimeout(timer);
+  }
+
+  return false;
+}
+
+module.exports = {
+  runCommand,
+  auditRoadmapCompletions,
+  runHealthCheckReport,
+  runPreflightHealthCheck,
+  verifyPostSessionHealth,
+  didSessionChangeProject
+};

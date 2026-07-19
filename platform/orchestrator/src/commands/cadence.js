@@ -1,9 +1,7 @@
 const path = require('path');
 const fs = require('fs/promises');
-const { SessionAggregator } = require('../api/session-aggregator');
 const { GitHubNotifier } = require('../runners/github-notifier');
 const { resolveScheduleConfig } = require('../scheduler/window-config');
-const { RoadmapReader } = require('../roadmap/roadmap-reader');
 const { execFile: exec } = require('../infra/exec-utils');
 const { getOrchestratorPaths } = require('../session/path-utils');
 
@@ -86,64 +84,11 @@ async function runWeekly(project, config, logDir, notifier, dryRun) {
 }
 
 async function runMonthly(project, config, logDir, notifier) {
-  const report = { cost: null, archived: { count: 0, items: [] } };
-
-  // Task 1: Archive stale parked items
-  console.log('  Task: Archive parked items (inactive >30d)');
-  try {
-    const aggregator = new SessionAggregator(logDir);
-    const staleItems = await aggregator.findStaleParkedItems(30);
-
-    if (staleItems.length > 0) {
-      const roadmapReader = new RoadmapReader(project.projectDir);
-      const hasRoadmap = await roadmapReader.exists();
-
-      if (hasRoadmap) {
-        for (const itemId of staleItems) {
-          await roadmapReader._updateItemStatus(itemId, '-');
-          console.log(`    Archived: ${itemId}`);
-        }
-      }
-
-      report.archived = { count: staleItems.length, items: staleItems };
-    } else {
-      console.log('    No stale parked items found.');
-    }
-  } catch (err) {
-    console.log(`    Error: ${err.message}`);
-  }
-
-  // Task 2: Cost review
-  console.log('  Task: Monthly cost review');
-  try {
-    const aggregator = new SessionAggregator(logDir);
-    const costReport = await aggregator.generateMonthlyCostReport();
-    report.cost = costReport.cost;
-
-    console.log(`    Total cost: $${costReport.cost.totalCost.toFixed(2)}`);
-    console.log(`    Sessions: ${costReport.cost.sessionCount}`);
-    console.log(`    Avg cost/session: $${costReport.cost.avgCostPerSession.toFixed(2)}`);
-
-    if (costReport.cost.monthOverMonthChange !== null) {
-      const change = costReport.cost.monthOverMonthChange;
-      console.log(`    Month-over-month: ${change >= 0 ? '+' : ''}${change.toFixed(1)}%`);
-
-      if (change > 50) {
-        console.log('    !! Cost increase >50% — review recommended');
-      }
-    }
-  } catch (err) {
-    console.log(`    Error: ${err.message}`);
-  }
-
-  // Report via GitHub Issue
-  await notifier.postMonthlyReport(report);
-
-  // Save cadence status
-  await saveCadenceStatus(logDir, 'monthly', report);
-
-  console.log('');
-  console.log('  Monthly cadence complete.');
+  // The monthly review's tasks (stale parked-item archiving, cost aggregation)
+  // were driven by session summaries, which are no longer generated. Disabled
+  // until the token-based estimator (session/token-estimator.js) replaces them.
+  console.log('  Monthly review is disabled: session summaries are no longer generated.');
+  console.log('  It will return with the token-based estimator (see roadmap: token-estimator).');
   console.log('');
   return 0;
 }

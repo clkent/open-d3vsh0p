@@ -1,7 +1,7 @@
 # Test Coverage Integrity
 
 ## Purpose
-Ensures every source file in the DevShop orchestrator has meaningful, behavior-verifying tests. Establishes guardrails that prevent agents from writing trivially-passing tests that game coverage metrics without actually validating code behavior. Prioritizes coverage by module criticality and provides a dedicated test strategy for the 1,362-line parallel-orchestrator.js.
+Ensures every source file in the DevShop orchestrator has meaningful, behavior-verifying tests. Establishes guardrails that prevent agents from writing trivially-passing tests that game coverage metrics without actually validating code behavior. Prioritizes coverage by module criticality.
 
 ## Status
 IMPLEMENTED
@@ -16,18 +16,13 @@ IMPLEMENTED
 ### Coverage Targets
 Every source file in `platform/orchestrator/src/` SHALL have a corresponding `.test.js` file co-located in the same directory. Coverage SHALL be implemented in priority order based on module criticality and risk.
 
-#### Scenario: P0 — parallel-orchestrator.js
-- **GIVEN** the file `platform/orchestrator/src/parallel-orchestrator.js` (1,362 lines, the orchestration brain)
-- **WHEN** test coverage is assessed
-- **THEN** it SHALL have a comprehensive `parallel-orchestrator.test.js` covering state transitions, error paths, and parking/salvage logic as described in the Parallel Orchestrator Test Strategy requirement
-
 #### Scenario: P1 — Command files
 - **GIVEN** the command files in `platform/orchestrator/src/commands/`
 - **WHEN** test coverage is assessed
-- **THEN** each command file SHALL have a corresponding `.test.js` file: `run.test.js`, `kickoff.test.js`, `talk.test.js`, `schedule.test.js`, `status.test.js`, `cadence.test.js`, `watch.test.js`, `report.test.js`
+- **THEN** each command file SHALL have a corresponding `.test.js` file (e.g., `run.test.js`, `kickoff.test.js`, `pair.test.js`, `security.test.js`)
 
 #### Scenario: P2 — Core utilities
-- **GIVEN** the core utility files: `exec-utils.js`, `logger.js`, `health-gate.js`, `registry.js`, `session-utils.js`, `session-aggregator.js`, `path-utils.js`
+- **GIVEN** the core utility files: `exec-utils.js`, `logger.js`, `health-checker.js`, `registry.js`, `session-utils.js`, `path-utils.js`
 - **WHEN** test coverage is assessed
 - **THEN** each SHALL have a corresponding `.test.js` file testing all exported functions/methods
 
@@ -37,7 +32,7 @@ Every source file in `platform/orchestrator/src/` SHALL have a corresponding `.t
 - **THEN** each SHALL have a corresponding `.test.js` file
 
 #### Scenario: P4 — Remaining modules
-- **GIVEN** the remaining untested files: `github-notifier.js`, `tech-debt-runner.js`
+- **GIVEN** the remaining untested files: `github-notifier.js`
 - **WHEN** test coverage is assessed
 - **THEN** each SHALL have a corresponding `.test.js` file
 
@@ -119,39 +114,6 @@ Tests SHALL follow structural patterns that ensure thorough behavior verificatio
 - **GIVEN** a test suite
 - **WHEN** any single `it()` block is run in isolation
 - **THEN** it SHALL pass or fail independently of whether other tests in the suite ran before it
-
-### Parallel Orchestrator Test Strategy
-The `parallel-orchestrator.js` file (1,362 lines) SHALL be tested through dependency injection of all external collaborators, with coverage of state transitions, error paths, and salvage logic.
-
-#### Scenario: Dependency injection for testability
-- **GIVEN** the ParallelOrchestrator class
-- **WHEN** tests instantiate it
-- **THEN** all external dependencies (GitOps, AgentRunner, Logger, ConsumptionMonitor, ReviewParser, HealthGate, etc.) SHALL be injected as constructor parameters or method parameters, enabling mock substitution without monkey-patching globals
-
-#### Scenario: Method-level isolation
-- **GIVEN** the public and significant private methods of ParallelOrchestrator
-- **WHEN** tests are written
-- **THEN** each method SHALL be tested in isolation with mocked collaborators, not only through end-to-end orchestration runs
-
-#### Scenario: State transition coverage
-- **GIVEN** the orchestrator's phase/group lifecycle (pending → in_progress → completed/parked)
-- **WHEN** state transition tests are written
-- **THEN** they SHALL cover: successful phase completion, group concurrency within a phase, phase dependency ordering, and multi-phase sequential execution
-
-#### Scenario: Error path coverage
-- **GIVEN** the orchestrator handles various failure modes
-- **WHEN** error path tests are written
-- **THEN** they SHALL cover: merge conflict during consolidation, agent crash mid-implementation, agent context overflow, budget exhaustion mid-phase, review failure exceeding max retries, and health gate failure
-
-#### Scenario: Parking and salvage logic
-- **GIVEN** the orchestrator parks work items and salvages partial progress
-- **WHEN** parking/salvage tests are written
-- **THEN** they SHALL verify: items are parked with descriptive reasons, salvageable work (tests pass + commits exist) is retained, non-salvageable work is cleanly abandoned, and parking updates the roadmap when applicable
-
-#### Scenario: Mock all external processes
-- **GIVEN** ParallelOrchestrator spawns Claude CLI agents and runs git operations
-- **WHEN** tests mock these operations
-- **THEN** no test SHALL spawn a real process, touch the filesystem (except temp dirs), or make network calls — all external interactions SHALL be mocked
 
 ### Pre-Commit Hook Enhancement
 The existing `.githooks/pre-commit` hook SHALL be enhanced to verify that new source files have corresponding test files. This check runs alongside the existing `npm test` execution.

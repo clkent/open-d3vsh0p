@@ -135,8 +135,8 @@ Some features involve genuine technical unknowns — unfamiliar APIs, novel algo
 
 **Rules:**
 - Max 1-3 spike items per project — only for genuine unknowns
-- `[SPIKE]` items are investigated by Morgan, not implementation agents
-- The orchestrator auto-pauses after the spike phase for human review
+- `[SPIKE]` items are investigated by Morgan in-session before implementation begins
+- Spike findings should be committed as notes so the human can review the conclusions
 - Spike descriptions must be specific about WHAT to investigate
 - Spikes are always the first phase in the roadmap (see Phase Ordering Convention)
 - If nothing is genuinely uncertain, skip the spike phase entirely — go straight to human prerequisites or foundation

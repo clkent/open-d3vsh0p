@@ -130,41 +130,8 @@ class RoadmapReader {
   }
 
   /**
-   * Get the next phase that's ready to execute.
-   * A phase is ready when all items in its dependency phase are complete or parked
-   * (with parked items in blockingParkedIds treated as unsatisfied).
-   */
-  getNextPhase(roadmap, blockingParkedIds = new Set()) {
-    for (const phase of roadmap.phases) {
-      // Check if this phase has any pending items
-      const hasPending = phase.groups.some(g => g.items.some(i => i.status === 'pending'));
-      if (!hasPending) continue;
-
-      // Check if all dependencies are satisfied
-      if (phase.depends && phase.depends.length > 0) {
-        const allDepsSatisfied = phase.depends.every(depNumber => {
-          const depPhase = roadmap.phases.find(p => p.number === depNumber);
-          if (!depPhase) return true; // unknown dep, don't block
-          return depPhase.groups.every(g =>
-            g.items.every(i => {
-              if (i.status === 'complete') return true;
-              if (i.status === 'parked' && !blockingParkedIds.has(i.id)) return true;
-              return false;
-            })
-          );
-        });
-        if (!allDepsSatisfied) continue;
-      }
-
-      return phase;
-    }
-    return null;
-  }
-
-  /**
    * Get phase numbers for all phases whose dependencies are satisfied.
    * A phase is actionable when all items in its dependency phases are complete or parked.
-   * Unlike getNextPhase (returns first ready phase), this returns all ready phases.
    */
   getActionablePhaseNumbers(roadmap) {
     const actionable = [];
@@ -188,47 +155,10 @@ class RoadmapReader {
   }
 
   /**
-   * Get all parked items from a phase.
-   */
-  getParkedItemsInPhase(phase) {
-    const parked = [];
-    for (const group of phase.groups) {
-      for (const item of group.items) {
-        if (item.status === 'parked') {
-          parked.push({ ...item, groupLetter: group.letter, groupLabel: group.label });
-        }
-      }
-    }
-    return parked;
-  }
-
-  /**
-   * Get groups from a phase that have pending items.
-   */
-  getPendingGroups(phase) {
-    return phase.groups.filter(g => g.items.some(i => i.status === 'pending'));
-  }
-
-  /**
-   * Check if a phase is a spike-only phase (all pending items are spikes).
-   */
-  isSpikePhase(phase) {
-    const pending = phase.groups.flatMap(g => g.items.filter(i => i.status === 'pending'));
-    return pending.length > 0 && pending.every(i => i.isSpike);
-  }
-
-  /**
    * Mark a requirement item as complete in the roadmap file.
    */
   async markItemComplete(requirementId) {
     await this._updateItemStatus(requirementId, 'x');
-  }
-
-  /**
-   * Mark a requirement item as parked in the roadmap file.
-   */
-  async markItemParked(requirementId) {
-    await this._updateItemStatus(requirementId, '!');
   }
 
   async _updateItemStatus(requirementId, marker) {
@@ -244,61 +174,8 @@ class RoadmapReader {
     await fs.writeFile(this.roadmapPath, content);
   }
 
-  /**
-   * Reset parked [!] items back to pending [ ] in the roadmap file.
-   * Skips items tagged [HUMAN] — those stay parked for human intervention.
-   * @param {object} [options]
-   * @param {boolean} [options.includeHuman=false] - If true, also reset [HUMAN] items (legacy --fresh behavior)
-   */
-  async resetParkedItems({ includeHuman = false } = {}) {
-    let content = await fs.readFile(this.roadmapPath, 'utf-8');
-    const updated = content.replace(/^(- \[)!(]\s+`.+)$/gm, (match, prefix, rest) => {
-      if (!includeHuman && match.includes('[HUMAN]')) return match;
-      return prefix + ' ' + rest;
-    });
-    if (updated !== content) {
-      await fs.writeFile(this.roadmapPath, updated);
-    }
-    return updated !== content;
-  }
-
-  /**
-   * Annotate a parked [!] item with [HUMAN] marker in its description.
-   * Used when runtime classification discovers an item needs human intervention.
-   * Only annotates if not already marked [HUMAN].
-   *
-   * @param {string} requirementId - The requirement ID to annotate
-   * @returns {Promise<boolean>} true if annotation was applied
-   */
-  async annotateWithHuman(requirementId) {
-    let content = await fs.readFile(this.roadmapPath, 'utf-8');
-    // Match: - [!] `itemId` — description (without existing [HUMAN])
-    const pattern = new RegExp(
-      `^(- \\[!\\]\\s+\`${this._escapeRegex(requirementId)}\`\\s*(?:—|--)\\s*)(?!.*\\[HUMAN\\])(.+)$`,
-      'm'
-    );
-    const match = content.match(pattern);
-    if (match) {
-      content = content.replace(pattern, '$1[HUMAN] $2');
-      await fs.writeFile(this.roadmapPath, content);
-      return true;
-    }
-    return false;
-  }
-
   _escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  /**
-   * Check if all items across all phases are complete or parked.
-   */
-  isComplete(roadmap) {
-    return roadmap.phases.every(phase =>
-      phase.groups.every(group =>
-        group.items.every(item => item.status === 'complete' || item.status === 'parked')
-      )
-    );
   }
 
   /**

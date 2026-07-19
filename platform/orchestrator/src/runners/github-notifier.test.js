@@ -130,36 +130,6 @@ describe('GitHubNotifier', () => {
     });
   });
 
-  describe('postMonthlyReport', () => {
-    it('returns null when unavailable', async () => {
-      const n = createNotifier({ available: false });
-      const result = await n.postMonthlyReport({ cost: { totalCost: 100 } });
-      assert.equal(result, null);
-    });
-
-    it('creates monthly issue', async () => {
-      let createdTitle = null;
-      const n = createNotifier({
-        available: true,
-        createIssue: async (title) => { createdTitle = title; return 101; }
-      });
-
-      const result = await n.postMonthlyReport({ cost: { totalCost: 50 } });
-      assert.equal(result, 101);
-      assert.match(createdTitle, /\[DevShop Monthly\] Test Project/);
-    });
-
-    it('returns null on error', async () => {
-      const n = createNotifier({
-        available: true,
-        createIssue: async () => { throw new Error('create failed'); }
-      });
-
-      const result = await n.postMonthlyReport({ cost: {} });
-      assert.equal(result, null);
-    });
-  });
-
   describe('_formatDailyDigest', () => {
     it('includes session ID, cost, and invocations', () => {
       const n = createNotifier();
@@ -291,70 +261,6 @@ describe('GitHubNotifier', () => {
         worktrees: { pruned: 3 }
       });
       assert.match(body, /Pruned: 3/);
-    });
-  });
-
-  describe('_formatMonthlyReport', () => {
-    it('includes cost summary', () => {
-      const n = createNotifier();
-      const body = n._formatMonthlyReport({
-        cost: {
-          totalCost: 150.50,
-          sessionCount: 10,
-          avgCostPerSession: 15.05,
-          totalInvocations: 45
-        }
-      });
-      assert.match(body, /\$150\.50/);
-      assert.match(body, /Sessions: 10/);
-      assert.match(body, /\$15\.05/);
-    });
-
-    it('includes month-over-month change', () => {
-      const n = createNotifier();
-      const body = n._formatMonthlyReport({
-        cost: {
-          totalCost: 200,
-          monthOverMonthChange: 25.5,
-          previousMonth: { totalCost: 160 }
-        }
-      });
-      assert.match(body, /25\.5%/);
-      assert.match(body, /increase/);
-    });
-
-    it('shows warning when cost increase exceeds 50%', () => {
-      const n = createNotifier();
-      const body = n._formatMonthlyReport({
-        cost: {
-          totalCost: 300,
-          monthOverMonthChange: 75.0,
-          previousMonth: { totalCost: 171 }
-        }
-      });
-      assert.match(body, /Warning/);
-      assert.match(body, /exceeds 50%/);
-    });
-
-    it('shows decrease correctly', () => {
-      const n = createNotifier();
-      const body = n._formatMonthlyReport({
-        cost: {
-          totalCost: 100,
-          monthOverMonthChange: -20.0,
-          previousMonth: { totalCost: 125 }
-        }
-      });
-      assert.match(body, /decrease/);
-    });
-
-    it('includes archived items', () => {
-      const n = createNotifier();
-      const body = n._formatMonthlyReport({
-        archived: { count: 2, items: ['old-req-1', 'old-req-2'] }
-      });
-      assert.match(body, /Archived: 2/);
-      assert.match(body, /old-req-1/);
     });
   });
 

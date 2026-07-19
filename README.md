@@ -98,7 +98,7 @@ Interactive session with Morgan to diagnose and fix issues. Morgan has context a
 ./devshop status my-app
 ```
 
-Shows roadmap progress, completed/pending/parked items, and latest session summary.
+Shows roadmap progress, completed/pending/parked items, and active session state.
 
 ## Typical Workflow
 
@@ -129,7 +129,7 @@ Tests run automatically via pre-commit hook and GitHub Actions CI.
 ./devshop schedule remove my-app     # Remove the schedule
 ```
 
-When scheduled, Morgan runs autonomously in time windows (morning, afternoon, evening, night) with per-window budget and time limits.
+When scheduled, Morgan runs autonomously in time windows (night, morning, day) with per-window budget and time limits.
 
 ### Design Skills
 
@@ -163,24 +163,19 @@ Clean up orphaned worktrees and stale branches after crashes. Also runs automati
 
 ```bash
 ./devshop cadence run my-app --type weekly     # Branch cleanup
-./devshop cadence run my-app --type monthly    # Archive parked items, cost review
+./devshop cadence run my-app --type monthly    # Disabled pending token-based estimator
 ```
-
-### Bug Reports
-
-```bash
-./devshop report my-app
-```
-
-Queue bug reports or feature requests while Morgan is working. Processed between phases.
 
 ### Project Health Check
 
-On fresh sessions, Morgan runs a health check gate (tests + build) before starting work. If the check fails, Morgan attempts repair automatically. If that fails, you drop into pair mode to fix it together.
+`run` executes the project's health check (tests + build, auto-detected or from `healthCheck` config — including native iOS/Android builds) at both ends of a session:
+
+- **Before spawning Morgan** — if the baseline is already broken, the failure output is injected into Morgan's prompt and repairing it becomes his first task.
+- **After Morgan exits** — the closing gate. If the session broke something Morgan didn't catch, Morgan is re-entered to repair it (up to 2 attempts, 15 min each). If it still fails, the session branch is **not** consolidated to main — fix interactively with `pair`, then consolidate with `run --resume`.
 
 ### Budget & Time Limits
 
-Default: $30/session, 7-hour time limit. Morgan self-regulates and the orchestrator enforces a hard timeout. Press Ctrl+C for graceful pause — Morgan finishes current work, commits, and stops.
+Default: $30/session, 7-hour time limit. Morgan self-regulates and the orchestrator enforces a hard timeout. Use Ctrl+C or /exit to end the session — resume later with `--resume`.
 
 ## Security & Trust Model
 

@@ -6,7 +6,6 @@ const { TemplateEngine } = require('../agents/template-engine');
 const { AgentSession } = require('../agents/agent-session');
 const { OpenSpecReader } = require('../roadmap/openspec-reader');
 const { loadConfig } = require('../infra/config');
-const { BroadcastServer } = require('../infra/broadcast-server');
 const { execFile: execFileAsync } = require('../infra/exec-utils');
 const { generateSessionId } = require('../session/session-utils');
 const { getOrchestratorPaths } = require('../session/path-utils');
@@ -67,30 +66,6 @@ async function planCommand(project, cliConfig) {
     }
   });
 
-  // Start broadcast server for watch command
-  const broadcastPort = cliConfig.broadcastPort || 3100;
-  const broadcastServer = new BroadcastServer();
-  try {
-    await broadcastServer.start(broadcastPort);
-    if (broadcastServer.isRunning) {
-      console.log(`  Broadcasting on port ${broadcastPort} (use "watch" to monitor)`);
-    }
-  } catch {
-    // Non-fatal — plan session continues without broadcast
-  }
-
-  const onEvent = broadcastServer.isRunning
-    ? (event) => {
-        broadcastServer.broadcast({
-          source: 'riley',
-          sessionId,
-          timestamp: new Date().toISOString(),
-          persona: 'Riley',
-          event
-        });
-      }
-    : undefined;
-
   // Try to resume existing PM session (unless --fresh)
   const stateDir = path.join(cliConfig.activeAgentsDir, 'orchestrator');
   let existingSession = null;
@@ -141,7 +116,7 @@ async function planCommand(project, cliConfig) {
       }
 
       if (trimmed.toLowerCase() === 'push') {
-        const fixed = await autoFixBeforeCommit(cliConfig.projectDir, agentSession, onEvent);
+        const fixed = await autoFixBeforeCommit(cliConfig.projectDir, agentSession);
         totalCost += fixed.cost;
         console.log('');
         console.log('  Pushing changes to GitHub...');
@@ -151,7 +126,7 @@ async function planCommand(project, cliConfig) {
 
       if (trimmed.toLowerCase() === 'done' || trimmed.toLowerCase() === 'exit') {
         // Auto-fix roadmap/requirements format issues before exiting
-        const fixResult = await autoFixBeforeCommit(cliConfig.projectDir, agentSession, onEvent);
+        const fixResult = await autoFixBeforeCommit(cliConfig.projectDir, agentSession);
         totalCost += fixResult.cost;
 
         // Check for unpushed changes before exiting
@@ -165,9 +140,6 @@ async function planCommand(project, cliConfig) {
         } catch { /* git check failed, continue with exit */ }
 
         await agentSession.saveSessionState(stateDir);
-        if (broadcastServer.isRunning) {
-          try { await broadcastServer.stop(); } catch {}
-        }
         console.log('');
         console.log(`  Session saved. Total cost: $${totalCost.toFixed(2)}, Turns: ${turnCount}`);
         console.log(`  Resume later with: ./devshop plan ${cliConfig.projectId}`);
@@ -184,8 +156,7 @@ async function planCommand(project, cliConfig) {
         const options = {
           systemPromptTemplate: 'pm-agent',
           promptFile: turnCount === 1 && !existingSession ? 'brain-dump-prompt.md' : null,
-          templateVars,
-          onEvent
+          templateVars
         };
 
         const result = await agentSession.chat(trimmed, options);
@@ -204,9 +175,6 @@ async function planCommand(project, cliConfig) {
   // Handle Ctrl+C gracefully
   rl.on('close', async () => {
     await agentSession.saveSessionState(stateDir);
-    if (broadcastServer.isRunning) {
-      try { await broadcastServer.stop(); } catch {}
-    }
     await logger.log('info', 'plan_session_ended', { totalCost, turnCount });
   });
 
@@ -264,7 +232,7 @@ async function commitAndPush(projectDir, projectId) {
  * Validate roadmap and requirements format, auto-fix via Riley up to 3 times.
  * Returns { cost } with total cost of fix attempts.
  */
-async function autoFixBeforeCommit(projectDir, agentSession, onEvent) {
+async function autoFixBeforeCommit(projectDir, agentSession) {
   let cost = 0;
   const maxRetries = 3;
 
@@ -284,7 +252,7 @@ async function autoFixBeforeCommit(projectDir, agentSession, onEvent) {
       }
       console.log(`  Requirements format has ${reqResult.errors.length} issue(s). Asking Riley to fix...`);
       const fixPrompt = buildRequirementsFixPrompt(reqResult, projectDir);
-      const fixResult = await agentSession.chat(fixPrompt, { onEvent });
+      const fixResult = await agentSession.chat(fixPrompt);
       cost += fixResult.cost || 0;
     }
   } catch {
@@ -309,7 +277,7 @@ async function autoFixBeforeCommit(projectDir, agentSession, onEvent) {
       const issueCount = fmtResult.nearMisses.length + fmtResult.errors.length;
       console.log(`  Roadmap has ${issueCount} format issue(s). Asking Riley to fix...`);
       const fixPrompt = buildRoadmapFixPrompt(fmtResult, projectDir);
-      const fixResult = await agentSession.chat(fixPrompt, { onEvent });
+      const fixResult = await agentSession.chat(fixPrompt);
       cost += fixResult.cost || 0;
     }
   } catch {

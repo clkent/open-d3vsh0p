@@ -20,7 +20,6 @@ function buildRoutes(processManager) {
     { method: 'GET',    pattern: '/api/projects/:id/sessions/:sessionId',         handler: handleGetSession },
     { method: 'POST',   pattern: '/api/projects/:id/sessions/:sessionId/stop',    handler: (p, b, q) => handleStopSession(p, b, q, processManager) },
     { method: 'POST',   pattern: '/api/projects/:id/sessions/:sessionId/resume',  handler: (p, b, q) => handleResumeSession(p, b, q, processManager) },
-    { method: 'POST',   pattern: '/api/projects/:id/agents/:role/invoke',         handler: handleInvokeAgent },
     { method: 'GET',    pattern: '/api/projects/:id/sessions/:sessionId/logs',    handler: handleGetLogs },
     { method: 'GET',    pattern: '/api/projects/:id/sessions/:sessionId/summary', handler: handleGetSummary },
   ];
@@ -214,31 +213,6 @@ async function handleResumeSession(params, body, _query, processManager) {
       sessionId: result.sessionId,
       pid: result.pid,
       resumed: true
-    }
-  };
-}
-
-// --- Agent Invocation ---
-
-async function handleInvokeAgent(params, body) {
-  const registry = await loadRegistry();
-  const project = findProject(registry, params.id);
-
-  if (!body || !body.task) {
-    throw new ApiError('BAD_REQUEST', 'Missing required field: task');
-  }
-
-  // Return 501 — agent invocation requires spawning a claude process
-  // which is complex and better handled through the session lifecycle.
-  // This is a placeholder for future direct agent invocation.
-  return {
-    status: 200,
-    data: {
-      projectId: project.id,
-      role: params.role,
-      status: 'queued',
-      task: body.task,
-      message: 'Direct agent invocation will spawn via session lifecycle'
     }
   };
 }

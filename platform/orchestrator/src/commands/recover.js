@@ -21,8 +21,7 @@ async function recoverCommand(project, config) {
         console.log(`  Warning: ${event} — ${data?.error || ''}`);
       }
     },
-    logCommit: async () => {},
-    logMerge: async () => {}
+    logCommit: async () => {}
   };
 
   const gitOps = new GitOps(logger);

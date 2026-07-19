@@ -87,28 +87,6 @@ class GitHubNotifier {
     }
   }
 
-  /**
-   * Post a monthly cost review report.
-   * Title format: [DevShop Monthly] <project name> - <YYYY-MM>
-   */
-  async postMonthlyReport(report) {
-    if (!(await this.isAvailable())) {
-      console.log('  ~ [github-notifier] gh CLI not available, skipping monthly report');
-      return null;
-    }
-
-    const monthId = new Date().toISOString().slice(0, 7);
-    const title = `[DevShop Monthly] ${this.projectName} - ${monthId}`;
-    const body = this._formatMonthlyReport(report);
-
-    try {
-      return await this._createIssue(title, body);
-    } catch (err) {
-      console.log(`  ~ [github-notifier] Failed to post monthly report: ${err.message}`);
-      return null;
-    }
-  }
-
   async _findIssue(title) {
     try {
       const { stdout } = await exec('gh', [
@@ -235,42 +213,6 @@ class GitHubNotifier {
     if (report.worktrees) {
       sections.push(`\n### Worktree Cleanup`);
       sections.push(`- Pruned: ${report.worktrees.pruned || 0}`);
-    }
-
-    return sections.join('\n');
-  }
-
-  _formatMonthlyReport(report) {
-    const sections = [];
-    sections.push(`## Monthly Review Report`);
-    sections.push(`_Generated ${new Date().toISOString()}_\n`);
-
-    if (report.cost) {
-      sections.push(`### Cost Summary`);
-      sections.push(`- Total cost: $${(report.cost.totalCost || 0).toFixed(2)}`);
-      sections.push(`- Sessions: ${report.cost.sessionCount || 0}`);
-      sections.push(`- Avg cost/session: $${(report.cost.avgCostPerSession || 0).toFixed(2)}`);
-      sections.push(`- Total invocations: ${report.cost.totalInvocations || 0}`);
-
-      if (report.cost.previousMonth) {
-        const change = report.cost.monthOverMonthChange;
-        const direction = change >= 0 ? 'increase' : 'decrease';
-        sections.push(`\n**Month-over-month:** ${Math.abs(change).toFixed(1)}% ${direction}`);
-
-        if (change > 50) {
-          sections.push(`\n> **Warning:** Cost increase exceeds 50% threshold. Review recommended.`);
-        }
-      }
-    }
-
-    if (report.archived) {
-      sections.push(`\n### Archived Items`);
-      sections.push(`- Archived: ${report.archived.count || 0} parked items (inactive >30 days)`);
-      if (report.archived.items && report.archived.items.length > 0) {
-        for (const item of report.archived.items) {
-          sections.push(`  - \`${item}\``);
-        }
-      }
     }
 
     return sections.join('\n');

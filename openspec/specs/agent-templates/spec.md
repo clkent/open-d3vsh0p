@@ -1,116 +1,95 @@
 # Agent Templates
 
 ## Purpose
-Provides persona-based system prompts and configuration for all agent roles in the DevShop orchestrator. Each agent type has a dedicated directory containing a system-prompt.md and config.json. Shared behavioral standards are factored into reusable partials. Variable substitution injects project-specific context at render time.
+Provides persona-based system prompts and configuration for all agent roles in the DevShop orchestrator. Each agent type has a dedicated directory containing prompt templates and a config.json. The template inventory is: `pm-agent` (Riley), `principal-engineer` (Morgan), `security-agent` (Casey), and `_shared` reusable partials. Variable substitution injects project-specific context at render time.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
-- `templates/agents/implementation-agent/system-prompt.md` -- Implementation agent prompt
-- `templates/agents/implementation-agent/config.json` -- Implementation agent config
-- `templates/agents/principal-engineer/system-prompt.md` -- Morgan persona prompt
+- `templates/agents/principal-engineer/system-prompt.md` -- Morgan review persona prompt
+- `templates/agents/principal-engineer/run-prompt.md` -- Morgan's orchestration prompt for run sessions
+- `templates/agents/principal-engineer/pair-prompt.md` -- Morgan's pair session prompt
 - `templates/agents/security-agent/system-prompt.md` -- Casey persona prompt
 - `templates/agents/pm-agent/system-prompt.md` -- Riley standard PM prompt
 - `templates/agents/pm-agent/brain-dump-prompt.md` -- Riley brain dump session prompt
+- `templates/agents/pm-agent/kickoff-prompt.md`, `bootstrap-prompt.md`, `talk-prompt.md` -- Riley kickoff, bootstrap, and mid-project prompts
 - `templates/agents/*/config.json` -- per-agent role configuration
-- `templates/agents/_shared/testing-standards.md` -- shared testing standards partial
-- `platform/orchestrator/src/template-engine.js` -- TemplateEngine with partial resolution and variable substitution
+- `templates/agents/_shared/` -- shared partials (roadmap rules and template, spec/project formats, roadmap execution rules, sub-agent delegation, design skills)
+- `platform/orchestrator/src/agents/template-engine.js` -- TemplateEngine with partial resolution and variable substitution
 
 ## Requirements
 
 ### Template Directory Structure
-The system SHALL organize agent templates such that each agent type has its own directory under `templates/agents/` containing a `system-prompt.md` file and a `config.json` file. The directory name SHALL match the `agentType` identifier used by the orchestrator.
+The system SHALL organize agent templates such that each agent type has its own directory under `templates/agents/` containing its prompt templates and a `config.json` file. The directory name SHALL match the `agentType` identifier used by the orchestrator. The agent type directories SHALL be `pm-agent`, `principal-engineer`, and `security-agent`, with shared partials under `_shared/`.
 
-#### Scenario: Implementation agent directory
-- **WHEN** the template engine renders agent type `implementation-agent`
-- **THEN** it SHALL read from `templates/agents/implementation-agent/system-prompt.md`
+#### Scenario: Agent directory resolution
+- **WHEN** the template engine renders agent type `security-agent`
+- **THEN** it SHALL read from `templates/agents/security-agent/system-prompt.md`
 
 #### Scenario: Config file per agent
-- **WHEN** `getAgentConfig('implementation-agent')` is called
-- **THEN** it SHALL return parsed JSON from `templates/agents/implementation-agent/config.json` containing `role`, `name`, `model`, `temperature`, and `permissions`
+- **WHEN** `getAgentConfig('security-agent')` is called
+- **THEN** it SHALL return parsed JSON from `templates/agents/security-agent/config.json` containing `role`, `name`, `temperature`, and `permissions`
 
 #### Scenario: Missing config file handled gracefully
 - **WHEN** `getAgentConfig` is called for an agent type with no config.json
 - **THEN** it SHALL return an empty object `{}` without throwing
 
-### Implementation Agent
-The system SHALL provide a single implementation agent template with a neutral developer persona. The agent SHALL include the team context (Morgan, Casey, Riley) and shared partials (parallel-awareness, project-conventions, project-gotchas, testing-standards, design-skills). The orchestrator assigns persona names (Jordan, Alex, Sam, Taylor) for log identification, but all use the same `implementation-agent` template.
-
-#### Scenario: Implementation agent prompt
-- **WHEN** the template engine renders `implementation-agent`
-- **THEN** it SHALL produce a prompt containing project context variables, team member descriptions, definition of done, prohibited patterns, and all included partials
-
-#### Scenario: Design skills partial included
-- **WHEN** the implementation agent prompt is rendered
-- **THEN** it SHALL include `{{>design-skills}}` which conditionally renders design workflow instructions based on `HAS_DESIGN_SKILLS`
-
 ### Principal Engineer (Morgan)
-The system SHALL provide a principal engineer template named Morgan with a review-focused prompt. Morgan's prompt SHALL define review criteria across five areas: Correctness, Test Coverage, Code Quality, Security, and Architecture. Morgan SHALL respond with exactly one of two decisions: APPROVE or REQUEST_CHANGES (with Critical/Important/Minor severity categories).
+The system SHALL provide a principal engineer template named Morgan. Morgan's `system-prompt.md` SHALL define a review-focused persona with a structured JSON response format: a `decision` of exactly APPROVE or REQUEST_CHANGES, dimensional scores (1-5) for spec_adherence, test_coverage, code_quality, security, simplicity, and implementation_authenticity, a summary, and issues with `critical`/`major`/`minor` severities. Additional Morgan prompts SHALL cover run orchestration (`run-prompt.md`) and pair sessions (`pair-prompt.md`).
 
-#### Scenario: Morgan review criteria completeness
+#### Scenario: Morgan review scoring dimensions
 - **WHEN** the principal-engineer system prompt is rendered
-- **THEN** it SHALL include review criteria sections for Correctness, Test Coverage, Code Quality, Security, and Architecture
+- **THEN** it SHALL include a scoring rubric covering spec_adherence, test_coverage, code_quality, security, simplicity, and implementation_authenticity
 
 #### Scenario: Morgan response format
 - **WHEN** the principal-engineer system prompt is rendered
-- **THEN** it SHALL instruct Morgan to respond with either APPROVE or REQUEST_CHANGES, with REQUEST_CHANGES structured into Critical, Important, and Minor sections
+- **THEN** it SHALL instruct Morgan to respond with a JSON block whose `decision` is either APPROVE or REQUEST_CHANGES, with issues categorized as critical, major, or minor
+
+#### Scenario: Morgan run prompt partials
+- **WHEN** the principal-engineer run-prompt.md is rendered
+- **THEN** it SHALL include the `{{>roadmap-execution-rules}}` and `{{>sub-agent-delegation}}` shared partials
 
 #### Scenario: Morgan config
 - **WHEN** the principal-engineer config.json is read
-- **THEN** the role SHALL be set and the allowed commands SHALL include read-only tools
+- **THEN** it SHALL contain `role: "principal"` and `name: "Morgan"` with read-mostly permissions (`canModifyCode: false`)
 
 ### Security Agent (Casey)
-The system SHALL provide a security agent template named Casey with an audit-focused prompt. Casey's prompt SHALL define vulnerability categories at four severity levels: Critical (hardcoded secrets, SQL injection, command injection, auth bypass, path traversal), High (XSS, insecure deserialization, broken access control), Medium (rate limiting, verbose errors, known CVEs), and Low (missing security headers). Casey SHALL produce structured findings reports and SHALL not fix code directly.
+The system SHALL provide a security agent template named Casey with an audit-focused prompt. Casey SHALL produce structured findings reports with a Security Audit Summary counting findings at four severity levels (Critical, High, Medium, Low) and per-finding File/Issue/Risk/Recommendation fields. Casey SHALL NOT fix code directly.
 
 #### Scenario: Casey severity levels
 - **WHEN** the security-agent system prompt is rendered
-- **THEN** it SHALL define Critical, High, Medium, and Low severity categories with specific vulnerability types listed under each
+- **THEN** it SHALL define a Security Audit Summary with Critical, High, Medium, and Low counts
 
 #### Scenario: Casey output format
 - **WHEN** the security-agent system prompt is rendered
-- **THEN** it SHALL specify a structured findings format with Security Audit Summary counts and per-finding File/Issue/Risk/Recommendation fields
+- **THEN** it SHALL specify a structured findings format with per-finding File/Issue/Risk/Recommendation fields
 
 #### Scenario: Casey clean audit
 - **WHEN** the security-agent system prompt is rendered
-- **THEN** it SHALL instruct Casey that "No security issues found" is a valid outcome and to not manufacture findings
+- **THEN** it SHALL instruct Casey that finding no issues is a valid outcome and to not manufacture findings
 
 ### PM Agent (Riley)
-The system SHALL provide a PM agent template named Riley with two prompt modes: a standard system-prompt.md for mid-project work and a brain-dump-prompt.md for initial idea refinement. The standard prompt SHALL define a 5-step workflow for creating OpenSpec change proposals and roadmaps. The brain dump prompt SHALL define a 3-phase process: Listen and Ask (3-5 targeted questions per turn), Confirm Understanding, and Create Specs and Roadmap.
+The system SHALL provide a PM agent template named Riley with multiple prompt modes: a standard system-prompt.md for mid-project work, a brain-dump-prompt.md for initial idea refinement, plus kickoff, bootstrap, and talk prompts. The standard prompt SHALL define a 5-step workflow for creating OpenSpec change proposals and roadmaps. The brain dump prompt SHALL define a 3-phase process: Listen and Ask, Confirm Understanding, and Create Specs and Roadmap.
 
 #### Scenario: Riley standard mode
 - **WHEN** the pm-agent system-prompt.md is rendered
-- **THEN** it SHALL instruct Riley to read project requirements, create OpenSpec change proposals (proposal.md, tasks.md, specs/), and optionally create a roadmap.md
+- **THEN** it SHALL instruct Riley to read project requirements, create OpenSpec change proposals (proposal.md, tasks.md, specs/), and create or update a roadmap.md
 
 #### Scenario: Riley brain dump mode
 - **WHEN** the pm-agent brain-dump-prompt.md is rendered
-- **THEN** it SHALL instruct Riley to ask probing questions (problem, MVP, integrations, data models, security, error scenarios), confirm understanding, then create specs and roadmap
+- **THEN** it SHALL instruct Riley to ask probing questions, confirm understanding, then create specs and roadmap
 
-#### Scenario: Riley team awareness
-- **WHEN** either Riley prompt is rendered
-- **THEN** it SHALL list the implementation agent (Developer), Morgan (Principal Engineer), and Casey (Security Specialist) as team members
-
-### Spike Agent (Morgan)
-The system SHALL provide a spike agent template using Morgan's persona with an investigation-focused prompt. The spike agent investigates technical unknowns by producing `openspec/spikes/<spike-id>/findings.md` with Question, Findings, Recommendation (PROCEED/ADJUST/HIGH-RISK), and optional POC evidence. The spike agent SHALL NOT implement the full feature — it stays focused on answering a specific technical question.
-
-#### Scenario: Spike agent prompt content
-- **WHEN** the spike-agent system prompt is rendered with `SPIKE_ID` and `SPIKE_DESCRIPTION` variables
-- **THEN** it SHALL instruct Morgan to investigate the technical question, produce a findings.md file, and optionally create throwaway POC code in `openspec/spikes/<spike-id>/poc/`
-
-#### Scenario: Spike agent config
-- **WHEN** the spike-agent config.json is read
-- **THEN** it SHALL contain `role: "spike"` and `name: "Morgan"`
+#### Scenario: Riley roadmap partials
+- **WHEN** any Riley prompt that produces a roadmap is rendered
+- **THEN** it SHALL include the `{{>roadmap-rules}}` and `{{>roadmap-template}}` shared partials
 
 ### Shared Partials
-The system SHALL provide reusable partial files in `templates/agents/_shared/`: `testing-standards.md` (happy path, edge cases, error cases, readable/independent tests), `risk-preflight.md` (pre-implementation risk assessment), `parallel-awareness.md` (coordination when multiple agents work concurrently), `project-conventions.md` (dynamically loaded project conventions), `project-gotchas.md` (dynamically loaded project-specific pitfalls), and `design-skills.md` (conditional design workflow instructions rendered via `DESIGN_SKILLS_SECTION` variable).
-
-#### Scenario: Partial inclusion in implementation agents
-- **WHEN** any implementation agent system prompt is rendered
-- **THEN** it SHALL include shared partials via `{{>risk-preflight}}`, `{{>parallel-awareness}}`, `{{>project-conventions}}`, `{{>project-gotchas}}`, and `{{>testing-standards}}`
+The system SHALL provide reusable partial files in `templates/agents/_shared/`: `roadmap-rules.md` and `roadmap-template.md` (roadmap authoring rules and skeleton), `roadmap-execution-rules.md` (how Morgan works through a roadmap), `sub-agent-delegation.md` (rules for delegating groups to sub-agents with worktree isolation), `spec-format.md` and `project-format.md` (OpenSpec document formats), and `design-skills.md` (conditional design workflow instructions).
 
 #### Scenario: Partial resolution by template engine
-- **WHEN** the template engine encounters a partial reference like `{{>testing-standards}}`
-- **THEN** it SHALL load `templates/agents/_shared/testing-standards.md`, trim trailing whitespace, and substitute the content in place of the placeholder
+- **WHEN** the template engine encounters a partial reference like `{{>roadmap-rules}}`
+- **THEN** it SHALL load `templates/agents/_shared/roadmap-rules.md`, trim trailing whitespace, and substitute the content in place of the placeholder
 
 #### Scenario: Partial caching
 - **WHEN** the same partial is referenced in multiple agent prompts during one engine instance
@@ -121,7 +100,7 @@ The system SHALL provide reusable partial files in `templates/agents/_shared/`: 
 - **THEN** the template engine SHALL leave the placeholder unchanged in the output
 
 ### Variable Substitution
-The system SHALL replace `{{VARIABLE_NAME}}` placeholders in templates with project-specific values. Standard variables include `{{PROJECT_ID}}`, `{{PROJECT_DIR}}`, `{{TECH_STACK}}`, `{{GITHUB_REPO}}`, `{{CHANGE_NAME}}`, and `{{REQUIREMENTS}}`. Substitution SHALL use `String.replaceAll` to replace all occurrences of each variable.
+The system SHALL replace `{{VARIABLE_NAME}}` placeholders in templates with project-specific values. Standard variables include `{{PROJECT_ID}}`, `{{PROJECT_DIR}}`, `{{TECH_STACK}}`, `{{GITHUB_REPO}}`, `{{ROADMAP_CONTENT}}`, and `{{HEALTH_STATUS}}`. Substitution SHALL use `String.replaceAll` to replace all occurrences of each variable.
 
 #### Scenario: Project context injection
 - **WHEN** a template containing `{{PROJECT_ID}}` and `{{PROJECT_DIR}}` is rendered with vars `{ PROJECT_ID: 'my-app', PROJECT_DIR: '/code/my-app' }`
@@ -136,11 +115,11 @@ The system SHALL replace `{{VARIABLE_NAME}}` placeholders in templates with proj
 - **THEN** it SHALL perform variable substitution without partial resolution
 
 ### Agent Config Structure
-Each agent config.json SHALL contain at minimum: `role` (the agent's functional role), `name` (the persona name), and `model` (the Claude model identifier). Implementation agent configs SHALL include `permissions` specifying `canCreateFiles`, `canModifyCode`, `canInstallPackages`, and `canRunCommands` (array of allowed CLI commands). The PM agent config SHALL include `autoStart: true`, `maxTokens`, and permissions for `canCreateFiles`, `canModifySpecs`, and `canRunCommands`.
+Each agent config.json SHALL contain at minimum: `role` (the agent's functional role), `temperature`, `autoStart`, and `permissions` specifying `canCreateFiles` (or `canModifySpecs` for the PM agent), `canModifyCode` where applicable, and `canRunCommands` (array of allowed CLI commands). Persona-named agents (Morgan, Casey) SHALL include a `name` field.
 
-#### Scenario: Implementation agent config
-- **WHEN** the implementation-agent config.json is read
-- **THEN** it SHALL contain `role: "implementation"`, `name: "Developer"`, `model: "claude-sonnet-4-6"`, `temperature: 0.7`, `autoStart: false`, and permissions including `canRunCommands: ["npm", "node", "git", "openspec"]`
+#### Scenario: Principal engineer config
+- **WHEN** the principal-engineer config.json is read
+- **THEN** it SHALL contain `role: "principal"`, `name: "Morgan"`, `autoStart: false`, and permissions including `canRunCommands: ["git"]`
 
 #### Scenario: PM agent config
 - **WHEN** the pm-agent config.json is read

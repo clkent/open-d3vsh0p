@@ -46,13 +46,6 @@ The system SHOULD expose endpoints for starting, stopping, resuming, and queryin
 - **WHEN** a POST request is made to `/api/projects/:id/sessions/:sessionId/resume`
 - **THEN** the system SHOULD resume the session from its last persisted checkpoint
 
-### Agent Invocation Endpoints
-The system SHOULD expose endpoints for triggering individual agent runs outside of a full orchestrator session.
-
-#### Scenario: Invoke an agent directly
-- **WHEN** a POST request is made to `/api/projects/:id/agents/:role/invoke` with a task description
-- **THEN** the system SHOULD spawn the specified agent role for the project and return the run result
-
 ### Run Logs and Summary Retrieval
 The system SHOULD expose endpoints for retrieving structured run logs and session summaries.
 

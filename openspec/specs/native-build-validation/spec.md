@@ -1,14 +1,14 @@
 # Native Build Validation
 
 ## Purpose
-Validates that iOS and Android native builds compile successfully as part of the pre-work health check gate for React Native projects.
+Validates that iOS and Android native builds compile successfully as part of the pre-run preflight health check for React Native projects.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
 - `platform/orchestrator/src/quality/health-checker.js` — `detectHealthCheckCommands` native project auto-detection and build command construction
-- `platform/orchestrator/src/quality/health-gate.js` — health check gate integration that consumes detected native build commands
+- `platform/orchestrator/src/commands/run.js` — `runPreflightHealthCheck()` consumes detected native build commands before spawning Morgan
 
 ## Requirements
 

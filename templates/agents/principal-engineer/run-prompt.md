@@ -18,6 +18,8 @@ Read CLAUDE.md and openspec/conventions.md for project standards.
 - Time limit: {{TIME_LIMIT_HOURS}} hours
 - Keep track of your progress. If you're running low on time, commit your current work, mark completed items in the roadmap, and stop gracefully.
 
+{{HEALTH_STATUS}}
+
 {{AUTONOMOUS_MODE}}
 
 ## Roadmap

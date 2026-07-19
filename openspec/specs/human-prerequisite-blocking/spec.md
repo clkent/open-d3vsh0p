@@ -1,50 +1,53 @@
 # Human Prerequisite Blocking
 
 ## Purpose
-Ensures the orchestrator blocks on `[HUMAN]` roadmap items that are prerequisites for agent work, preventing wasted budget on tasks that will fail due to missing resources. Group Z user testing checkpoints remain non-blocking.
+Ensures `[HUMAN]` roadmap items that are prerequisites for agent work are never attempted by agents and are surfaced to the developer for resolution, preventing wasted budget on tasks that will fail due to missing resources. Group Z user testing checkpoints remain non-blocking.
 
 ## Status
 IMPLEMENTED
 
 ## Source Files
-- `platform/orchestrator/src/parallel-orchestrator.js` — auto-parking classification and phase pause logic
-- `platform/orchestrator/src/roadmap/roadmap-reader.js` — phase dependency resolution with blocking items
+- `platform/orchestrator/src/roadmap/roadmap-reader.js` — `[HUMAN]` tag parsing
+- `platform/orchestrator/src/roadmap/action-resolver.js` — analysis of incomplete `[HUMAN]` items for the action command
+- `templates/agents/_shared/roadmap-execution-rules.md` — instructs Morgan to skip `[HUMAN]` items
+- `templates/agents/_shared/roadmap-rules.md` — Group Z checkpoint convention (non-blocking `[HUMAN]` items)
 
 ## Requirements
 
-### Position-Based Blocking Classification
-The orchestrator SHALL classify `[HUMAN]` items as `blocking` or `non_blocking` based on their group position. Items in Group Z SHALL be classified as `non_blocking`. Items in any other group (A, B, C, etc.) SHALL be classified as `blocking`.
+### `[HUMAN]` Tag Parsing
+The roadmap reader SHALL detect `[HUMAN]` tags in item descriptions and set an `isHuman` flag on the parsed item.
 
-#### Scenario: HUMAN item in Group A is blocking
-- **WHEN** the orchestrator auto-parks a `[HUMAN]` item in Group A
-- **THEN** the item SHALL be classified as `blocking`
+#### Scenario: HUMAN item detection
+- **WHEN** a roadmap item has `[HUMAN]` in its description
+- **THEN** the parsed item SHALL have `isHuman: true`
 
-#### Scenario: HUMAN item in Group Z is non-blocking
-- **WHEN** the orchestrator auto-parks a `[HUMAN]` item in Group Z
-- **THEN** the item SHALL be classified as `non_blocking`
+### Agents Skip `[HUMAN]` Items
+Morgan's roadmap execution rules SHALL instruct him to skip items tagged `[HUMAN]` — these require manual action the developer must do. Parked `[!]` items SHALL be re-attempted only when they are not tagged `[HUMAN]`.
 
-### Phase Pause on Blocking HUMAN Items
-When a phase contains only blocking `[HUMAN]` items (no agent-executable work), the orchestrator SHALL pause execution, surface the items to the human, and wait for restart.
-
-#### Scenario: Pure human prerequisites phase triggers pause
-- **WHEN** the orchestrator begins a phase where all pending items are blocking `[HUMAN]` items
-- **THEN** the orchestrator SHALL pause with a message identifying each item and instructing the human to complete them and restart
-
-#### Scenario: Mixed phase with blocking HUMAN items
-- **WHEN** a phase contains both blocking `[HUMAN]` items and agent-executable items
-- **THEN** agent-executable items SHALL proceed normally
-- **AND** blocking `[HUMAN]` items SHALL be parked as `blocking`
-- **AND** dependent phases SHALL NOT start until the blocking items are resolved
+#### Scenario: Morgan skips a HUMAN prerequisite
+- **WHEN** Morgan's run session reaches an item tagged `[HUMAN]`
+- **THEN** Morgan SHALL leave it for the developer and move on rather than spending budget on it
 
 ### Dependent Phase Blocking
-Phases that depend on a phase with unresolved blocking `[HUMAN]` items SHALL NOT begin execution until those items are completed.
+Phases that depend on a phase with unresolved blocking `[HUMAN]` items SHALL NOT begin execution until those items are completed. Morgan's roadmap execution rules SHALL instruct him to treat incomplete `[HUMAN]` prerequisites in a dependency phase as blocking, while Group Z user-testing checkpoints remain non-blocking.
 
-#### Scenario: Dependent phase waits for blocking HUMAN items
+#### Scenario: Dependent phase waits for blocking items
 - **WHEN** Phase II depends on Phase I
-- **AND** Phase I has unresolved blocking `[HUMAN]` items
-- **THEN** Phase II SHALL NOT begin execution
+- **AND** Phase I has an incomplete `[HUMAN]` prerequisite (non-Group-Z)
+- **THEN** Morgan SHALL NOT start Phase II and SHALL surface the blocking item to the developer
 
-#### Scenario: Non-blocking items do not block dependent phases
+#### Scenario: Group Z checkpoints do not block dependent phases
 - **WHEN** Phase II depends on Phase I
-- **AND** Phase I has only `non_blocking` parked items (Group Z checkpoints)
-- **THEN** Phase II SHALL begin execution normally
+- **AND** Phase I's only incomplete `[HUMAN]` items are Group Z user-testing checkpoints
+- **THEN** Morgan SHALL treat Phase I as satisfied and proceed with Phase II
+
+### Surfacing via the Action Command
+The `action` command SHALL surface incomplete `[HUMAN]` items to the developer for interactive resolution. The action resolver SHALL analyze the roadmap, filter to incomplete items with `isHuman: true` in actionable phases, and classify each by action type (e.g., environment setup for API-key/credentials items).
+
+#### Scenario: HUMAN items listed for resolution
+- **WHEN** `./devshop action my-project` is executed and the roadmap contains pending or parked `[HUMAN]` items in actionable phases
+- **THEN** the command SHALL list each item with its phase and guide the developer through resolving it
+
+#### Scenario: Deferred HUMAN items counted
+- **WHEN** `[HUMAN]` items exist in phases that are not yet actionable
+- **THEN** the resolver SHALL exclude them from the actionable list and report them as deferred
