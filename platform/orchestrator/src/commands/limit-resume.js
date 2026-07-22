@@ -79,7 +79,6 @@ function probeAvailability({ spawnFn = spawn, timeoutMs = PROBE_TIMEOUT_MS } = {
       try { proc.kill('SIGKILL'); } catch { /* already gone */ }
       done('unknown');
     }, timeoutMs);
-    timer.unref?.();
 
     proc.on('error', () => {
       clearTimeout(timer);
@@ -123,9 +122,10 @@ function watchForStall({ transcriptFile, onLimitDetected, deps = {} }) {
 
   let stopped = false;
   let cancelSleep = () => {};
+  // Deliberately NOT unref'd: during a limit wait this timer can be the only
+  // handle keeping the orchestrator process alive.
   const sleep = (ms) => new Promise((resolve) => {
     const t = setTimeout(resolve, ms);
-    t.unref?.();
     cancelSleep = () => { clearTimeout(t); resolve(); };
   });
 
@@ -207,9 +207,10 @@ async function waitForLimitReset({ resumeCount = 0, windowEndTimeMs = null, deps
   const startedAt = now();
   let cancelled = false;
   let cancelSleep = () => {};
+  // Deliberately NOT unref'd: while waiting out the limit window, this timer
+  // is the only handle keeping the orchestrator process alive.
   const sleep = (ms) => new Promise((resolve) => {
     const t = setTimeout(resolve, ms);
-    t.unref?.();
     cancelSleep = () => { clearTimeout(t); resolve(); };
   });
   const onSigint = () => {
