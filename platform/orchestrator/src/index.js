@@ -17,6 +17,7 @@ async function main() {
       resume: { type: 'boolean', default: false },
       fresh: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
+      'no-auto-resume': { type: 'boolean', default: false },
       requirements: { type: 'string' },
       window: { type: 'string' },
       type: { type: 'string' },
@@ -116,6 +117,7 @@ async function main() {
     resume: values.resume,
     fresh: values.fresh,
     dryRun: values['dry-run'],
+    autoResume: !values['no-auto-resume'],
     requirements: values.requirements ? values.requirements.split(',').map(s => s.trim()) : null,
     window: values.window || null,
     templatesDir: TEMPLATES_DIR,
@@ -227,6 +229,7 @@ Options:
   --budget <usd>           Session budget limit (default: 30)
   --time-limit <hours>     Session time limit (default: 7)
   --resume                 Resume a previously interrupted session
+  --no-auto-resume         Don't auto-resume after a usage-limit stop (run)
   --fresh                  Start a fresh session (ignore saved state)
   --requirements <ids>     Comma-separated requirement IDs to work on
   --window <name>          Run in a specific time window (night/morning/day)

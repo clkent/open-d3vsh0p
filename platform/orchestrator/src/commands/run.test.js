@@ -184,23 +184,48 @@ describe('run command — session persistence', () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
+  const SESSION_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
+
   it('saves run session ID', async () => {
-    await saveCliSession(tmpDir, 'morgan-session-123', 'run');
+    await saveCliSession(tmpDir, SESSION_UUID, 'run');
 
     const raw = await fs.readFile(path.join(tmpDir, 'run-session.json'), 'utf-8');
     const state = JSON.parse(raw);
-    assert.equal(state.sessionId, 'morgan-session-123');
+    assert.equal(state.sessionId, SESSION_UUID);
   });
 
   it('loads saved run session ID', async () => {
-    await saveCliSession(tmpDir, 'morgan-session-456', 'run');
+    await saveCliSession(tmpDir, SESSION_UUID, 'run');
     const loaded = await loadCliSession(tmpDir, 'run');
-    assert.equal(loaded, 'morgan-session-456');
+    assert.equal(loaded, SESSION_UUID);
   });
 
   it('returns null when no run session saved', async () => {
     const loaded = await loadCliSession(tmpDir, 'run');
     assert.equal(loaded, null);
+  });
+
+  it('rejects a traversal-shaped saved session ID', async () => {
+    const warn = mock.method(console, 'warn', () => {});
+    try {
+      await saveCliSession(tmpDir, '../../etc/passwd', 'run');
+      const loaded = await loadCliSession(tmpDir, 'run');
+      assert.equal(loaded, null);
+      assert.ok(warn.mock.calls.length > 0);
+    } finally {
+      warn.mock.restore();
+    }
+  });
+
+  it('rejects a malformed (non-UUID) saved session ID', async () => {
+    const warn = mock.method(console, 'warn', () => {});
+    try {
+      await saveCliSession(tmpDir, 'morgan-session-123', 'run');
+      const loaded = await loadCliSession(tmpDir, 'run');
+      assert.equal(loaded, null);
+    } finally {
+      warn.mock.restore();
+    }
   });
 });
 
