@@ -3,7 +3,8 @@
 ## 1. Limit-Resume Module (probe)
 
 - [ ] 1.1 Create `platform/orchestrator/src/commands/limit-resume.js` with `probeAvailability()`: spawn `claude -p "ok" --model <cheap model>` with piped stdio and ~60s timeout; classify exit/stderr into `available` / `limited` / `unknown` per the spec's pattern; export constants (`STALL_THRESHOLD_MS`, `PROBE_INTERVAL_MS`, `MAX_WAIT_MS`, `MAX_AUTO_RESUMES`)
-- [ ] 1.2 Unit tests for probe classification (exit 0 → available; non-zero + limit-pattern stderr → limited; non-zero other / timeout → unknown), injecting a fake spawn
+- [ ] 1.2 Security hardening in the probe: spawn with an argument array via `child_process.spawn` (never a shell string / `exec`); never echo the probe's raw stderr to the terminal — subprocess output can carry ANSI escape sequences — log only the classification result
+- [ ] 1.3 Unit tests for probe classification (exit 0 → available; non-zero + limit-pattern stderr → limited; non-zero other / timeout → unknown), injecting a fake spawn; assert raw stderr is not written to stdout/stderr of the orchestrator
 
 ## 2. Stall Detection
 
@@ -22,7 +23,8 @@
 - [ ] 4.1 Wrap the Morgan spawn in a resume loop: start stall watcher alongside `morganPromise`; on limit-condition SIGTERM (then SIGKILL after grace) the frozen process; on early exit (>15 min budget left) probe once; enter `waitForLimitReset()` only on `limited`; respawn via existing `--resume` path with continuation prompt; skip everything when `config.autoResume` is false
 - [ ] 4.2 Active-time accounting: track cumulative active session time across spawns; re-arm the SIGTERM timer with the remainder on each resume; never count wait time
 - [ ] 4.3 Sequencing: save session ID after every Morgan exit; run post-session health gate + consolidation exactly once after the final exit; hold the run lock across waits/resumes (verify the existing finally still releases it)
-- [ ] 4.4 Integration-style tests for the loop (mock spawn/probe): limit → wait → resume → final exit runs post-session once; intentional early exit resumes nothing; `--no-auto-resume` bypasses detection
+- [ ] 4.4 Validate session IDs loaded from `run-session.json`: reject any value that is not a canonical UUID (regex check in or beside `loadCliSession`) before it is used in the transcript watch path or passed to `claude --resume`; on rejection log a warning and fall back to a fresh session; unit test with traversal-shaped (`../../x`) and malformed values
+- [ ] 4.5 Integration-style tests for the loop (mock spawn/probe): limit → wait → resume → final exit runs post-session once; intentional early exit resumes nothing; `--no-auto-resume` bypasses detection
 
 ## 5. CLI Flag & Help
 
