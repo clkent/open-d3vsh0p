@@ -35,5 +35,5 @@
 
 - [x] 6.1 Update `README.md` run usage: auto-resume behavior, `--no-auto-resume`, waiting-state output
 - [x] 6.2 Confirm `openspec/roadmap.md` Phase XVIII entry still matches final behavior; adjust wording if implementation deviated
-- [ ] 6.3 Manual verification: simulate a limit (stub probe to return `limited`, or run with a nearly-exhausted account) and observe kill → wait banner → resume with context intact; verify Ctrl+C during wait ends the run cleanly through health gate/consolidation
+- [x] 6.3 Manual verification: simulate a limit (stub probe to return `limited`, or run with a nearly-exhausted account) and observe kill → wait banner → resume with context intact; verify Ctrl+C during wait ends the run cleanly through health gate/consolidation
 - [x] 6.4 Resolve design open questions during implementation (probe model choice; constants stay internal; continuation prompt adequacy after mid-turn interruption) and note outcomes in design.md
