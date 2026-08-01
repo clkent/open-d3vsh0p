@@ -71,9 +71,12 @@ Scaffolds a new repo, drops you into an interactive session with Riley. Describe
 ./devshop run my-app --resume              # Continue where you left off
 ./devshop run my-app --budget 10           # Limit spend (default: $30)
 ./devshop run my-app --time-limit 4        # Limit hours (default: 7)
+./devshop run my-app --no-auto-resume      # Don't wait out usage-limit stops
 ```
 
 Spawns Morgan to work through the roadmap. Session branch auto-consolidates to main via PR when Morgan finishes.
+
+If your account's Claude usage limit stops Morgan mid-session, the run doesn't die: the orchestrator detects the stop (frozen session or early exit), prints `usage limit hit — next probe at HH:MM (Ctrl+C to stop)`, polls every 15 minutes, and resumes Morgan with full context once the limit window resets. Waits are bounded (max ~5.5h, max 2 auto-resumes per run, never past a scheduled window's end), wait time doesn't count against `--time-limit`, and a single Ctrl+C during the wait ends the run normally. Pass `--no-auto-resume` to turn this off.
 
 ### talk — Chat with Riley mid-project
 

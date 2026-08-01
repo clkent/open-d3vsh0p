@@ -7,6 +7,7 @@ const { TemplateEngine } = require('../agents/template-engine');
 const { resolveScheduleConfig, getWindowConfig, computeWindowEndTimeMs, VALID_WINDOWS } = require('../scheduler/window-config');
 const { generateSessionId } = require('../session/session-utils');
 const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
+const { runSessionWithAutoResume, transcriptPath } = require('./limit-resume');
 const { loadConfig } = require('../infra/config');
 
 const DEVSHOP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -195,35 +196,29 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   console.log('  Use Ctrl+C or /exit to end the session.');
   console.log('');
 
-  // Spawn Morgan with optional time limit
-  const { promise: morganPromise, proc: morganProc } = spawnClaudeTerminal({
-    projectDir: config.projectDir,
-    appendSystemPrompt: resumeSessionId ? undefined : renderedPrompt,
-    model: morganConfig.model,
-    sessionId: claudeSessionId,
-    resume: resumeSessionId,
-    name: `Morgan — ${config.projectId}`,
-    initialPrompt: resumeSessionId
-      ? `Continue working through the roadmap from where you left off. Check roadmap.md for pending items.${healthStatus ? `\n\n${healthStatus}` : ''}`
-      : initialPrompt
+  const effectiveSessionId = claudeSessionId || resumeSessionId;
+  const continuationPrompt = `Continue working through the roadmap from where you left off. Check roadmap.md for pending items.${healthStatus ? `\n\n${healthStatus}` : ''}`;
+
+  // Spawn Morgan inside the limit-aware session loop: enforces the time
+  // limit against active session time, detects a usage-limit stop (frozen
+  // session or early exit), waits out the limit window, and auto-resumes —
+  // unless --no-auto-resume was passed.
+  const { timedOut, autoResumeCount } = await runSessionWithAutoResume({
+    spawnSession: ({ isResume }) => spawnClaudeTerminal({
+      projectDir: config.projectDir,
+      appendSystemPrompt: (resumeSessionId || isResume) ? undefined : renderedPrompt,
+      model: morganConfig.model,
+      sessionId: claudeSessionId,
+      resume: (resumeSessionId || isResume) ? effectiveSessionId : undefined,
+      name: `Morgan — ${config.projectId}`,
+      initialPrompt: (resumeSessionId || isResume) ? continuationPrompt : initialPrompt
+    }),
+    saveSession: () => saveCliSession(stateDir, effectiveSessionId, 'run'),
+    transcriptFile: transcriptPath(config.projectDir, effectiveSessionId),
+    timeLimitMs: config.timeLimitMs || null,
+    windowEndTimeMs: config.windowEndTimeMs || null,
+    autoResume: config.autoResume !== false
   });
-
-  // Time limit enforcement
-  let timedOut = false;
-  const timer = config.timeLimitMs ? setTimeout(() => {
-    timedOut = true;
-    console.log('');
-    console.log('  === Time limit reached — stopping Morgan ===');
-    console.log('');
-    morganProc.kill('SIGTERM');
-  }, config.timeLimitMs) : null;
-
-  await morganPromise;
-
-  if (timer) clearTimeout(timer);
-
-  // Save session for resume
-  await saveCliSession(stateDir, claudeSessionId || resumeSessionId, 'run');
 
   // Post-session health check — catch anything broken that Morgan missed.
   // Only runs when the session actually changed the project (commits or
@@ -260,6 +255,9 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   console.log(`  Remaining:   ${pendingItems.length} items`);
   if (timedOut) {
     console.log(`  Stop reason: time_limit`);
+  }
+  if (autoResumeCount > 0) {
+    console.log(`  Auto-resumes: ${autoResumeCount} (after usage-limit waits)`);
   }
   console.log('========================');
   console.log('');

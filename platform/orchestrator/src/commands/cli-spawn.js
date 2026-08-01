@@ -89,7 +89,16 @@ async function loadCliSession(stateDir, type) {
   try {
     const raw = await fs.readFile(path.join(stateDir, `${type}-session.json`), 'utf-8');
     const state = JSON.parse(raw);
-    return state.sessionId || null;
+    const { isValidSessionId } = require('./limit-resume');
+    if (!isValidSessionId(state.sessionId)) {
+      // Saved state is untrusted local runtime data — a non-UUID value must
+      // never reach a file path or a `claude --resume` argument.
+      if (state.sessionId) {
+        console.warn(`  ~ [session] Ignoring invalid saved session ID in ${type}-session.json — starting fresh.`);
+      }
+      return null;
+    }
+    return state.sessionId;
   } catch {
     return null;
   }

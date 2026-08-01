@@ -99,6 +99,8 @@ Pure additive change to `run`; no state or schema migration. Rollback = revert; 
 
 ## Open Questions
 
-- Probe model: hardcode the cheapest available model id vs reuse `morganConfig.model`? (Leaning: cheapest hardcoded, with fallback to default if the id is rejected.)
-- Should `MAX_AUTO_RESUMES` / `STALL_THRESHOLD_MS` be surfaced in `schedule-defaults.json` for window runs, or stay internal constants until scheduling is actually exercised (`scheduling-e2e-validation`)?
-- Does a limit-terminated turn leave the roadmap/worktree in a state the continuation prompt handles well? (Existing resume prompt says "continue from where you left off; check roadmap.md" — likely sufficient, verify during implementation.)
+All resolved during implementation:
+
+- **Probe model** → the `haiku` model alias, hardcoded (`PROBE_MODEL` in `limit-resume.js`). The alias is version-independent — the CLI resolves it to the current cheapest tier — so it can't go stale like a dated model id.
+- **Constants** → stay internal to `limit-resume.js` (not surfaced in `schedule-defaults.json`); all are injectable via the `deps` parameter for tests, and can be promoted to config later if real scheduled usage demands it.
+- **Continuation prompt after a mid-turn interruption** → reuses the existing resume prompt ("continue from where you left off; check roadmap.md"), which re-grounds Morgan in the roadmap rather than trusting interrupted-turn state; adequacy to be confirmed in the live limit test (task 6.3, run jointly with the operator).
