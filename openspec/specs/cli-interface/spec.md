@@ -33,7 +33,7 @@ The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk
 - **THEN** the system SHALL print usage showing all commands, options, and examples, then exit with code 0
 
 ### Option Parsing
-The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30"), `--time-limit` (string, default "7"), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Budget SHALL be parsed as USD float. Time limit SHALL be parsed as hours and converted to milliseconds (multiplied by 3,600,000). Requirements SHALL be split by comma into an array of trimmed strings.
+The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30"), `--time-limit` (string, default "7"), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--no-auto-resume` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Budget SHALL be parsed as USD float. Time limit SHALL be parsed as hours and converted to milliseconds (multiplied by 3,600,000). Requirements SHALL be split by comma into an array of trimmed strings. The config SHALL expose `autoResume: true` unless `--no-auto-resume` is provided.
 
 #### Scenario: Default budget and time limit
 - **WHEN** no --budget or --time-limit options are provided
@@ -58,6 +58,14 @@ The system SHALL parse CLI options using `node:util` `parseArgs` with options in
 #### Scenario: Resume flag
 - **WHEN** `--resume` is provided
 - **THEN** config.resume SHALL be true
+
+#### Scenario: Auto-resume enabled by default
+- **WHEN** `--no-auto-resume` is not provided
+- **THEN** config.autoResume SHALL be true
+
+#### Scenario: Auto-resume opt-out
+- **WHEN** `--no-auto-resume` is provided
+- **THEN** config.autoResume SHALL be false
 
 ### Run Command
 The system SHALL spawn Morgan (Principal Engineer) as a persistent Claude Code CLI session when the `run` command is executed. The run command SHALL manage the session lifecycle: acquire run lock, create session branch, render and pass the orchestration prompt, spawn Morgan CLI, and consolidate to main after Morgan exits.

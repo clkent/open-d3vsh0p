@@ -222,4 +222,4 @@
 <!-- depends: Phase XVII Group A -->
 
 ### Group A: Auto-Resume
-- [ ] `limit-aware-resume` — When the account usage limit stops Morgan (frozen interactive session detected via transcript-mtime stall, or early exit), `run` confirms it with a cheap availability probe, polls until the limit window resets, then respawns Morgan with `--resume` (context intact); time limit counts active session time only, respects window end, caps resume attempts, and can be disabled with `--no-auto-resume`
+- [x] `limit-aware-resume` — When the account usage limit stops Morgan (frozen interactive session detected via transcript-mtime stall, or early exit), `run` confirms it with a cheap availability probe, polls until the limit window resets, then respawns Morgan with `--resume` (context intact); time limit counts active session time only, respects window end, caps resume attempts, and can be disabled with `--no-auto-resume`
