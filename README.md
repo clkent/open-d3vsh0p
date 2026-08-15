@@ -69,14 +69,12 @@ Scaffolds a new repo, drops you into an interactive session with Riley. Describe
 ```bash
 ./devshop run my-app
 ./devshop run my-app --resume              # Continue where you left off
-./devshop run my-app --budget 10           # Limit spend (default: $30)
-./devshop run my-app --time-limit 4        # Limit hours (default: 7)
 ./devshop run my-app --no-auto-resume      # Don't wait out usage-limit stops
 ```
 
-Spawns Morgan to work through the roadmap. Session branch auto-consolidates to main via PR when Morgan finishes.
+Spawns Morgan to work through the roadmap. There is no session time limit or budget — the run continues until the roadmap is done, Morgan ends the session, or you stop it (Ctrl+C or /exit). Session branch auto-consolidates to main via PR when Morgan finishes.
 
-If your account's Claude usage limit stops Morgan mid-session, the run doesn't die: the orchestrator detects the stop (frozen session or early exit), prints `usage limit hit — next probe at HH:MM (Ctrl+C to stop)`, polls every 15 minutes, and resumes Morgan with full context once the limit window resets. Waits are bounded (max ~5.5h, max 2 auto-resumes per run, never past a scheduled window's end), wait time doesn't count against `--time-limit`, and a single Ctrl+C during the wait ends the run normally. Pass `--no-auto-resume` to turn this off.
+If your account's Claude usage limit stops Morgan mid-session, the run doesn't die: the orchestrator detects the stop (frozen session or early exit), prints `usage limit hit — next probe at HH:MM (Ctrl+C to stop)`, polls every 15 minutes, and resumes Morgan with full context once the limit window resets. Waits are bounded (max ~5.5h, max 2 auto-resumes per run, never past a scheduled window's end), and a single Ctrl+C during the wait ends the run normally. Pass `--no-auto-resume` to turn this off.
 
 ### talk — Chat with Riley mid-project
 
@@ -132,7 +130,7 @@ Tests run automatically via pre-commit hook and GitHub Actions CI.
 ./devshop schedule remove my-app     # Remove the schedule
 ```
 
-When scheduled, Morgan runs autonomously in time windows (night, morning, day) with per-window budget and time limits.
+When scheduled, Morgan runs autonomously in time windows (night, morning, day); each windowed run stops at its window's end hour.
 
 ### Design Skills
 
@@ -176,9 +174,9 @@ Clean up orphaned worktrees and stale branches after crashes. Also runs automati
 - **Before spawning Morgan** — if the baseline is already broken, the failure output is injected into Morgan's prompt and repairing it becomes his first task.
 - **After Morgan exits** — the closing gate. If the session broke something Morgan didn't catch, Morgan is re-entered to repair it (up to 2 attempts, 15 min each). If it still fails, the session branch is **not** consolidated to main — fix interactively with `pair`, then consolidate with `run --resume`.
 
-### Budget & Time Limits
+### Session Duration
 
-Default: $30/session, 7-hour time limit. Morgan self-regulates and the orchestrator enforces a hard timeout. Use Ctrl+C or /exit to end the session — resume later with `--resume`.
+Runs have no time limit or budget — they continue until the roadmap is done or you stop them. Use Ctrl+C or /exit to end the session — resume later with `--resume`. Scheduled window runs stop at the window's end hour. (`devshop security --budget` still caps security scans.)
 
 ## Security & Trust Model
 

@@ -11,7 +11,7 @@ const PROBE_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_WAIT_MS = 5.5 * 3600 * 1000;
 /** Max auto-resumes per run. */
 const MAX_AUTO_RESUMES = 2;
-/** Don't probe/resume when less than this much session time budget remains. */
+/** Don't resume when less than this much of the scheduled window remains. */
 const MIN_REMAINING_MS = 15 * 60 * 1000;
 /** How often the stall watcher stats the transcript file. */
 const TRANSCRIPT_POLL_MS = 60 * 1000;
@@ -253,24 +253,22 @@ async function waitForLimitReset({ resumeCount = 0, windowEndTimeMs = null, deps
 /**
  * Run a Morgan CLI session with limit-aware auto-resume.
  *
- * Owns the spawn loop: time-limit enforcement against ACTIVE session time
- * (wait time excluded), frozen-session stall detection, early-exit probing,
- * the bounded wait loop, and respawn via the caller's spawnSession.
+ * Owns the spawn loop: window-end deadline enforcement (windowed runs only —
+ * plain runs have no time bound), frozen-session stall detection, early-exit
+ * probing, the bounded wait loop, and respawn via the caller's spawnSession.
  *
  * @param {object} opts
  * @param {function} opts.spawnSession - ({ isResume }) => { promise, proc }
  * @param {function} opts.saveSession - async, called after every exit
  * @param {string|null} opts.transcriptFile - transcript to watch (null disables stall detection)
- * @param {number|null} opts.timeLimitMs
- * @param {number|null} opts.windowEndTimeMs
+ * @param {number|null} opts.windowEndTimeMs - absolute deadline (scheduled windows); null = unbounded
  * @param {boolean} opts.autoResume
- * @returns {Promise<{timedOut: boolean, autoResumeCount: number, activeElapsedMs: number, giveUpReason: string|null}>}
+ * @returns {Promise<{timedOut: boolean, autoResumeCount: number, giveUpReason: string|null}>}
  */
 async function runSessionWithAutoResume({
   spawnSession,
   saveSession,
   transcriptFile = null,
-  timeLimitMs = null,
   windowEndTimeMs = null,
   autoResume = true,
   deps = {}
@@ -282,28 +280,25 @@ async function runSessionWithAutoResume({
     terminate = terminateWithGrace,
     watch = watchForStall,
     wait = waitForLimitReset,
-    minRemainingMs = MIN_REMAINING_MS,
     maxResumes = MAX_AUTO_RESUMES
   } = deps;
 
   let timedOut = false;
   let autoResumeCount = 0;
-  let activeElapsedMs = 0;
   let giveUpReason = null;
   let isResume = false;
 
   while (true) {
-    const remainingMs = timeLimitMs ? Math.max(timeLimitMs - activeElapsedMs, 1) : null;
+    const deadlineMs = windowEndTimeMs ? Math.max(windowEndTimeMs - now(), 1) : null;
     const { promise, proc } = spawnSession({ isResume });
-    const startedAt = now();
 
-    const timer = remainingMs ? setTimeout(() => {
+    const timer = deadlineMs ? setTimeout(() => {
       timedOut = true;
       log('');
-      log('  === Time limit reached — stopping Morgan ===');
+      log('  === Window end reached — stopping Morgan ===');
       log('');
       terminate(proc);
-    }, remainingMs) : null;
+    }, deadlineMs) : null;
 
     let limitDetected = false;
     const watcher = (autoResume && transcriptFile) ? watch({
@@ -320,13 +315,9 @@ async function runSessionWithAutoResume({
     await promise;
     if (timer) clearTimeout(timer);
     watcher?.stop();
-    activeElapsedMs += now() - startedAt;
     await saveSession();
 
     if (!autoResume || timedOut) break;
-
-    const remainingAfterMs = timeLimitMs ? timeLimitMs - activeElapsedMs : Infinity;
-    if (remainingAfterMs <= minRemainingMs) break;
 
     if (!limitDetected) {
       // Early exit with budget left: probe once. Only a confirmed limit
@@ -349,7 +340,7 @@ async function runSessionWithAutoResume({
     log('');
   }
 
-  return { timedOut, autoResumeCount, activeElapsedMs, giveUpReason };
+  return { timedOut, autoResumeCount, giveUpReason };
 }
 
 module.exports = {

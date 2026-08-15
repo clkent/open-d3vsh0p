@@ -1,6 +1,4 @@
 {
-  "budgetLimitUsd": 30.00,
-  "timeLimitMs": 25200000,
   "agents": {
     "principal-engineer": {
       "maxBudgetUsd": 2.00,

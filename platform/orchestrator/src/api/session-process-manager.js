@@ -20,8 +20,6 @@ class SessionProcessManager {
 
     const args = [ORCHESTRATOR_ENTRY, 'run', projectId];
 
-    if (opts.budget) args.push('--budget', String(opts.budget));
-    if (opts.timeLimit) args.push('--time-limit', String(opts.timeLimit));
     if (opts.resume) args.push('--resume');
     if (opts.requirements) args.push('--requirements', opts.requirements.join(','));
     if (opts.window) args.push('--window', opts.window);

@@ -34,8 +34,7 @@ class Logger {
       console.log(`  ${icon} [milestone] ${data.requirementId} ${data.result}`);
     } else if (event === 'progress') {
       const used = data.budgetUsedUsd?.toFixed(2) ?? '0.00';
-      const limit = data.budgetLimitUsd?.toFixed(2) ?? '0.00';
-      console.log(`  [progress] ${data.phase} | ${data.completed}/${data.total} | $${used}/$${limit} | ${data.elapsedMinutes}m`);
+      console.log(`  [progress] ${data.phase} | ${data.completed}/${data.total} | $${used} | ${data.elapsedMinutes}m`);
     } else if (event === 'go_look') {
       console.log(`  >>> ${data.message}`);
     } else {
