@@ -215,7 +215,7 @@
 
 ### Group C: Scheduling Validation
 <!-- depends: Phase XVII Group A -->
-- [ ] `scheduled-terminal-run` — Scheduled windows open a real Terminal window instead of running headless: `schedule install` generates a `.command` wrapper per run window and the launchd plist invokes `open -a Terminal <wrapper>.command`, giving the scheduled run a real TTY so the identical interactive Morgan flow (health gates, time limit, consolidation) runs unchanged; wrapper exits cleanly to allow window auto-close; macOS-only (cron fallback keeps direct invocation and is documented as unsupported for run windows)
+- [ ] `scheduled-terminal-run` — Scheduled windows open a real Terminal window instead of running headless: `schedule install` generates a `.command` wrapper per run window and the launchd plist invokes `open -a Terminal <wrapper>.command`, giving the scheduled run a real TTY so the identical interactive Morgan flow (health gates, window boundaries, consolidation) runs unchanged; wrapper exits cleanly to allow window auto-close; macOS-only (cron fallback keeps direct invocation and is documented as unsupported for run windows)
 - [ ] `scheduling-e2e-validation` — [HUMAN] Full end-to-end test of the never-yet-used scheduling subsystem (after `scheduled-terminal-run`): `schedule install` → launchd plist fires → Terminal window opens with `run --window night` → autonomous Morgan session → post-session health gate → consolidation → morning digest; verify first-fire permissions, behavior while screen-locked, and pause/resume/remove lifecycle
 
 ## Phase XVIII: Usage-Limit Resilience
@@ -223,3 +223,9 @@
 
 ### Group A: Auto-Resume
 - [x] `limit-aware-resume` — When the account usage limit stops Morgan (frozen interactive session detected via transcript-mtime stall, or early exit), `run` confirms it with a cheap availability probe, polls until the limit window resets, then respawns Morgan with `--resume` (context intact); time limit counts active session time only, respects window end, caps resume attempts, and can be disabled with `--no-auto-resume`
+
+## Phase XIX: Unbounded Runs
+<!-- depends: Phase XVIII -->
+
+### Group A: Remove Session Limits
+- [ ] `remove-run-time-limit` — Strip the session time-limit concept (`--time-limit`, 7h default, SIGTERM timer, active-time accounting) and the unenforced run budget (`--budget` for run, header/prompt/defaults) so `./devshop run` continues until the project is done or the operator stops it; windowed runs keep their end-of-window boundary via `windowEndTimeMs`; usage-limit auto-resume caps and the security scan budget are unchanged
