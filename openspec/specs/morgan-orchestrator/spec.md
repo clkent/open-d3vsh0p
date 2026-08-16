@@ -95,7 +95,7 @@ The roadmap SHALL serve as the source of truth for progress — completed items 
 ### Requirement: Autonomous Mode for Scheduler
 Morgan SHALL operate autonomously when invoked by the scheduler, making decisions independently without waiting for user input.
 
-The system SHALL include a flag or context in Morgan's prompt indicating autonomous mode when a `--window` flag is present, instructing Morgan to proceed without asking questions.
+The system SHALL include a flag or context in Morgan's prompt indicating autonomous mode when a `--window` flag is present, instructing Morgan to proceed without asking questions and to work through roadmap items until everything is complete or blocked.
 
 #### Scenario: Scheduled run is autonomous
 - **WHEN** `./devshop run my-project --window morning` is executed by the scheduler
@@ -105,12 +105,14 @@ The system SHALL include a flag or context in Morgan's prompt indicating autonom
 - **WHEN** Morgan completes an item in autonomous mode
 - **THEN** Morgan SHALL commit, mark the item complete in roadmap.md, and proceed to the next item without pausing
 
-#### Scenario: Autonomous Morgan respects budget limits
-- **WHEN** Morgan's system prompt includes budget and time constraints
-- **THEN** Morgan SHALL monitor its progress and stop gracefully when approaching the limits, leaving remaining items for the next session
+#### Scenario: Autonomous Morgan works until done or blocked
+- **WHEN** Morgan works in autonomous mode
+- **THEN** Morgan SHALL continue through pending items until everything is complete or blocked, parking blockers and moving on, without budget- or time-based stopping guidance
 
 ### Requirement: Run Lifecycle Wrapper
 The `run.js` command handler SHALL manage the session lifecycle around Morgan's CLI session: lock acquisition, session branch creation, Morgan spawn wrapped in the limit-aware resume loop, and post-session consolidation. Morgan's exit is not unconditionally terminal: when auto-resume is enabled and a usage-limit condition is detected (per the `limit-aware-resume` capability), the wrapper SHALL wait for the limit window to reset and respawn Morgan with `--resume`, within the bounds defined by that capability. The session ID SHALL be saved after every Morgan exit; the post-session health gate and consolidation SHALL run exactly once, after the final Morgan exit of the run.
+
+The wrapper SHALL NOT enforce a session time limit. For windowed runs only, the wrapper SHALL terminate the `claude` CLI process when the window end time (`windowEndTimeMs`) is reached.
 
 #### Scenario: Pre-session setup
 - **WHEN** the `run` command starts
@@ -124,9 +126,13 @@ The `run.js` command handler SHALL manage the session lifecycle around Morgan's 
 - **WHEN** the run concludes (normally, via error, or after auto-resume cycles)
 - **THEN** the system SHALL release the run lock in a finally block, held continuously across any limit waits and resumes
 
-#### Scenario: Budget and time enforcement
-- **WHEN** the configured `timeLimitMs` of active session time elapses during Morgan's session (time spent waiting on a usage limit excluded)
-- **THEN** the system SHALL terminate the `claude` CLI process to enforce the time limit
+#### Scenario: No time limit on plain runs
+- **WHEN** a run without `--window` is in progress
+- **THEN** the system SHALL NOT terminate the `claude` CLI process based on elapsed time
+
+#### Scenario: Window end terminates a windowed run
+- **WHEN** a run with `--window` reaches `windowEndTimeMs` while Morgan's session is active
+- **THEN** the system SHALL terminate the `claude` CLI process
 
 #### Scenario: Limit-interrupted session resumes within one run
 - **WHEN** auto-resume is enabled and a usage-limit condition interrupts Morgan
@@ -135,12 +141,44 @@ The `run.js` command handler SHALL manage the session lifecycle around Morgan's 
 ### Requirement: Morgan Orchestration Prompt Template
 The system SHALL provide a prompt template at `templates/agents/principal-engineer/run-prompt.md` that instructs Morgan on the orchestration workflow.
 
-The template SHALL include: role description (Morgan as orchestrator), roadmap content, conventions, phase/group execution rules, sub-agent delegation guidelines, commit and test conventions, roadmap marking instructions, and budget/time awareness.
+The template SHALL include: role description (Morgan as orchestrator), roadmap content, conventions, phase/group execution rules, sub-agent delegation guidelines, commit and test conventions, and roadmap marking instructions. The template SHALL NOT include budget or time-limit constraints or guidance to stop early because of them.
 
 #### Scenario: Template rendered with project context
 - **WHEN** the run command prepares Morgan's prompt
-- **THEN** it SHALL render the template with variables for PROJECT_ID, PROJECT_DIR, GITHUB_REPO, TECH_STACK, ROADMAP_CONTENT, CONVENTIONS, BUDGET_USD, TIME_LIMIT_HOURS, and AUTONOMOUS_MODE
+- **THEN** it SHALL render the template with variables for PROJECT_ID, PROJECT_DIR, GITHUB_REPO, TECH_STACK, ROADMAP_CONTENT, CONVENTIONS, and AUTONOMOUS_MODE, with no BUDGET_USD or TIME_LIMIT_HOURS variables
 
 #### Scenario: Template includes delegation instructions
 - **WHEN** Morgan reads its system prompt
 - **THEN** it SHALL find instructions on when to delegate to sub-agents (multiple independent groups) vs. when to implement directly (single group or simple items)
+
+### Requirement: Continuous Execution
+Morgan SHALL work continuously through the roadmap and SHALL end the session only when no remaining pending item can be completed as valuable work: either all items are complete or parked, or every remaining pending item requires an incomplete `[HUMAN]` prerequisite or depends on parked work.
+
+Phase boundaries and Group Z user-testing checkpoints SHALL NOT be stopping points: on reaching one, Morgan SHALL note the checkpoint for the developer and continue into the next phase. Morgan SHALL NOT end a turn with a status summary while unblocked pending items remain.
+
+The interactive initial prompt SHALL tell Morgan that the user may interject at any time but that Morgan must not pause or wait for input. The same continue-until-blocked rule SHALL appear in the run prompt template (which persists across context compaction) and in the shared roadmap execution rules.
+
+#### Scenario: Group Z checkpoint reached mid-run
+- **WHEN** Morgan completes a phase's implementation groups and reaches its Group Z user-testing checkpoint while later phases have unblocked pending items
+- **THEN** Morgan SHALL note the checkpoint for the developer and continue into the next phase without pausing or ending the turn
+
+#### Scenario: All remaining work is blocked
+- **WHEN** every remaining pending item requires an incomplete `[HUMAN]` prerequisite or depends on parked work
+- **THEN** Morgan SHALL end the session, summarizing what is blocked and why continuing would not produce valuable work
+
+#### Scenario: Interactive run does not wait for input
+- **WHEN** `run` is executed without `--window`
+- **THEN** the initial prompt SHALL state that the user can interject but Morgan must not pause to wait for input
+
+### Requirement: Run Continues Through Voluntary Stops
+The `run` command SHALL treat Morgan going idle as a recoverable condition rather than the end of the run. When Morgan ends a turn without exiting (for example after Claude Code's "usage limit approaching — checkpoint now" injection, or any other voluntary wrap-up) and unblocked roadmap work remains, the wrapper SHALL continue Morgan per the `limit-aware-resume` capability's idle-with-work continuation, keeping the run lock held and the session branch unchanged.
+
+The post-session health gate and consolidation SHALL run exactly once, after the final Morgan exit of the run, regardless of how many continuations occurred.
+
+#### Scenario: Checkpoint stop is continued, not terminal
+- **WHEN** Morgan wraps up mid-run at a checkpoint and goes idle while unblocked pending items remain
+- **THEN** the run SHALL continue Morgan with `--resume` and defer the health gate and consolidation until the final exit
+
+#### Scenario: Continuations reported to the operator
+- **WHEN** a run included one or more idle continuations
+- **THEN** the session summary SHALL report how many continuations occurred

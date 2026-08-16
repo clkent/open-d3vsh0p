@@ -70,9 +70,9 @@ The system SHALL produce a rolling daily GitHub Issue with a snapshot of roadmap
 
 The system SHALL support autonomous microcycles during the day window (default 12pm-5pm).
 
-#### Scenario: Day run with window-specific limits
+#### Scenario: Day run bounded by window end
 - **WHEN** launchd/cron triggers the orchestrator with `--window day`
-- **THEN** the orchestrator SHALL use the day window's `budgetUsd` and `timeLimitHours`, and SHALL stop when the window end time is reached
+- **THEN** the orchestrator SHALL run until the window end time is reached, with no per-session budget or time-limit overrides
 
 #### Scenario: Requirement targeting via CLI
 - **WHEN** the day window run is invoked with `--requirements <ids>`
@@ -80,16 +80,15 @@ The system SHALL support autonomous microcycles during the day window (default 1
 
 ### Window-Aware Run Command
 
-The `run` command SHALL accept a `--window` flag that configures budget, time limits, and behavior based on the named window.
+The `run` command SHALL accept a `--window` flag that enables autonomous behavior and bounds the session to the named window's end hour. Window configuration SHALL NOT carry `budgetUsd` or `timeLimitHours` overrides; window config files that still contain these keys SHALL be tolerated and ignored.
 
-#### Scenario: --window flag overrides defaults
+#### Scenario: --window flag sets the window boundary
 - **WHEN** the user runs `node src/index.js run <project-id> --window night`
-- **THEN** the orchestrator SHALL use the night window's `budgetUsd` as the budget limit and compute `timeLimitMs` from the window's `endHour` minus current time
-- **AND** SHALL set `windowEndTimeMs` so consumption monitoring stops at window end
+- **THEN** the orchestrator SHALL compute `windowEndTimeMs` from the window's `endHour` and terminate the session when it is reached
 
-#### Scenario: --window with explicit overrides
-- **WHEN** the user provides both `--window night` and `--budget 5`
-- **THEN** the explicit `--budget` SHALL take precedence over the window's configured budget
+#### Scenario: Legacy window keys ignored
+- **WHEN** a window's schedule config still contains `budgetUsd` or `timeLimitHours`
+- **THEN** the run SHALL proceed without error and neither key SHALL affect the session
 
 ### Schedule CLI Command
 

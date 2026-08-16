@@ -13,11 +13,11 @@ IMPLEMENTED
 ## Requirements
 
 ### Default Configuration
-The system SHALL ship a `defaults.json` file containing baseline values for all orchestrator settings: `budgetLimitUsd` (30.00), `timeLimitMs` (25,200,000), `agents` (four roles), and `healthCheck` settings (`commands`, `timeoutMs`, `nativeBuildTimeoutMs`).
+The system SHALL ship a `defaults.json` file containing baseline values for all orchestrator settings: `agents` (four roles) and `healthCheck` settings (`commands`, `timeoutMs`, `nativeBuildTimeoutMs`). The defaults SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
 
-#### Scenario: Budget defaults
+#### Scenario: No session budget or time defaults
 - **WHEN** loadDefaults() is called
-- **THEN** the returned config SHALL contain `budgetLimitUsd: 30.00` and `timeLimitMs: 25200000`
+- **THEN** the returned config SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`
 
 #### Scenario: Health check defaults
 - **WHEN** loadDefaults() is called
@@ -54,19 +54,15 @@ The system SHALL load project-specific overrides from `active-agents/{project}/o
 - **THEN** project overrides SHALL be skipped and only defaults used
 
 ### CLI Option Priority
-The system SHALL merge configuration in priority order: CLI options > project overrides > defaults. CLI options for `budgetLimitUsd` and `timeLimitMs` SHALL override the merged result when explicitly provided (not undefined).
-
-#### Scenario: CLI budget overrides project and default
-- **WHEN** defaults has `budgetLimitUsd: 30`, project override has `budgetLimitUsd: 15`, and CLI passes `budgetLimitUsd: 10`
-- **THEN** the final config SHALL have `budgetLimitUsd: 10`
+The system SHALL merge configuration in priority order: CLI options > project overrides > defaults. The system SHALL NOT apply special-case CLI overrides for `budgetLimitUsd` or `timeLimitMs`; project override files that still contain these keys SHALL be merged without error but SHALL have no effect on run behavior.
 
 #### Scenario: CLI option not provided falls through
-- **WHEN** CLI options do not include `budgetLimitUsd` (value is undefined)
+- **WHEN** a CLI option is undefined
 - **THEN** the merged default/project-override value SHALL be used
 
-#### Scenario: CLI time limit overrides
-- **WHEN** CLI passes `timeLimitMs: 3600000`
-- **THEN** the final config SHALL have `timeLimitMs: 3600000` regardless of defaults or project overrides
+#### Scenario: Legacy override keys tolerated
+- **WHEN** a project's `orchestrator/config.json` contains `budgetLimitUsd` or `timeLimitMs`
+- **THEN** loadConfig SHALL complete without error and no session budget or time limit SHALL be enforced
 
 ### Deep Merge Behavior
 The system SHALL recursively merge nested objects from source into target. Arrays SHALL be replaced entirely (not concatenated). Primitive values from source SHALL overwrite target. Only plain objects (non-array) are recursively merged.
