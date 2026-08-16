@@ -6,6 +6,7 @@ const path = require('path');
 const {
   isValidSessionId,
   transcriptPath,
+  latestTranscriptMtime,
   probeAvailability,
   watchForStall,
   waitForLimitReset,
@@ -70,6 +71,45 @@ describe('probeAvailability', () => {
     assert.equal(await verdict, 'limited');
   });
 
+  it('classifies a limit message on stdout as limited', async () => {
+    const proc = makeFakeProc();
+    const verdict = probeAvailability({ spawnFn: () => proc });
+    proc.stdout.emit('data', 'Claude AI usage limit reached|1735689600');
+    proc.emit('exit', 1);
+    assert.equal(await verdict, 'limited');
+  });
+
+  it('classifies alternate limit wordings as limited', async () => {
+    for (const msg of [
+      "You've reached your usage limit",
+      "You've hit your Opus limit · resets 3:45pm",
+      'usage limit reached'
+    ]) {
+      const proc = makeFakeProc();
+      const verdict = probeAvailability({ spawnFn: () => proc });
+      proc.stderr.emit('data', msg);
+      proc.emit('exit', 1);
+      assert.equal(await verdict, 'limited', `should match: ${msg}`);
+    }
+  });
+
+  it("passes Morgan's model through and omits --model when unset", async () => {
+    const spawnedArgs = [];
+    const spawnWith = (model) => {
+      const proc = makeFakeProc();
+      const verdict = probeAvailability({
+        spawnFn: (cmd, args) => { spawnedArgs.push(args); return proc; },
+        model
+      });
+      proc.emit('exit', 0);
+      return verdict;
+    };
+    await spawnWith('opus');
+    await spawnWith(null);
+    assert.deepEqual(spawnedArgs[0], ['-p', 'ok', '--model', 'opus']);
+    assert.deepEqual(spawnedArgs[1], ['-p', 'ok']);
+  });
+
   it('classifies non-limit failures as unknown', async () => {
     const proc = makeFakeProc();
     const verdict = probeAvailability({ spawnFn: () => proc });
@@ -120,10 +160,9 @@ describe('watchForStall', () => {
     let t = 0;
     let limitCalls = 0;
     const watcher = watchForStall({
-      transcriptFile: '/fake/transcript.jsonl',
+      getMtime: async () => { t += 10; return 100; },
       onLimitDetected: () => { limitCalls++; },
       deps: {
-        statFn: async () => { t += 10; return { mtimeMs: 100 }; },
         probe: async () => 'limited',
         now: () => t,
         log: () => {},
@@ -135,57 +174,77 @@ describe('watchForStall', () => {
     assert.equal(limitCalls, 1);
   });
 
-  it('backs off after a benign idle — no re-probe without new activity', async () => {
+  it('re-probes on the interval while the stall persists — a misclassified probe self-heals', async () => {
     let t = 0;
     let probeCalls = 0;
     let limitCalls = 0;
+    const watcher = watchForStall({
+      getMtime: async () => { t += 10; return 100; },
+      onLimitDetected: () => { limitCalls++; },
+      deps: {
+        // first two probes misclassify (wording drift / transient error)
+        probe: async () => { probeCalls++; return probeCalls <= 2 ? 'unknown' : 'limited'; },
+        now: () => t,
+        log: () => {},
+        pollMs: 1,
+        stallThresholdMs: 5,
+        reprobeIntervalMs: 30
+      }
+    });
+    await watcher.done;
+    assert.equal(probeCalls, 3, 'kept re-probing after non-limited verdicts');
+    assert.equal(limitCalls, 1);
+  });
+
+  it('does not re-probe before the re-probe interval elapses', async () => {
+    let t = 0;
+    let probeCalls = 0;
     let polls = 0;
     let resolveEnough;
     const enoughPolls = new Promise(r => { resolveEnough = r; });
     const watcher = watchForStall({
-      transcriptFile: '/fake/transcript.jsonl',
-      onLimitDetected: () => { limitCalls++; },
+      getMtime: async () => {
+        t += 10;
+        polls++;
+        if (polls >= 20) resolveEnough();
+        return 100;
+      },
+      onLimitDetected: () => {},
       deps: {
-        statFn: async () => {
-          t += 10;
-          polls++;
-          if (polls >= 10) resolveEnough();
-          return { mtimeMs: 100 };
-        },
         probe: async () => { probeCalls++; return 'available'; },
         now: () => t,
         log: () => {},
         pollMs: 1,
-        stallThresholdMs: 5
+        stallThresholdMs: 5,
+        reprobeIntervalMs: 1000 // 20 polls advance t by ~200 — under the interval
       }
     });
     await enoughPolls;
     watcher.stop();
     await watcher.done;
-    assert.equal(probeCalls, 1);
-    assert.equal(limitCalls, 0);
+    assert.equal(probeCalls, 1, 'only the initial stall probe fired within the interval');
   });
 
-  it('re-arms after new activity and confirms a later limit', async () => {
+  it('fresh activity resets the stall cycle and a later limit is confirmed', async () => {
     let t = 0;
     let polls = 0;
     let probeCalls = 0;
     let limitCalls = 0;
     const watcher = watchForStall({
-      transcriptFile: '/fake/transcript.jsonl',
+      getMtime: async () => {
+        t += 10;
+        polls++;
+        // constant mtime, then a burst of activity at poll 5, constant again
+        return polls === 5 ? 200 : polls > 5 ? 300 : 100;
+      },
       onLimitDetected: () => { limitCalls++; },
       deps: {
-        statFn: async () => {
-          t += 10;
-          polls++;
-          // constant mtime, then a burst of activity at poll 5, constant again
-          return { mtimeMs: polls === 5 ? 200 : polls > 5 ? 300 : 100 };
-        },
         probe: async () => { probeCalls++; return probeCalls === 1 ? 'available' : 'limited'; },
         now: () => t,
         log: () => {},
         pollMs: 1,
-        stallThresholdMs: 5
+        stallThresholdMs: 5,
+        reprobeIntervalMs: 10000 // large: second probe comes from the reset cycle, not the interval
       }
     });
     await watcher.done;
@@ -193,14 +252,13 @@ describe('watchForStall', () => {
     assert.equal(limitCalls, 1);
   });
 
-  it('self-disables with a warning when the transcript never appears', async () => {
+  it('self-disables with a warning when no transcript can be read', async () => {
     const logs = [];
     let limitCalls = 0;
     const watcher = watchForStall({
-      transcriptFile: '/does/not/exist.jsonl',
+      getMtime: async () => null,
       onLimitDetected: () => { limitCalls++; },
       deps: {
-        statFn: async () => { throw new Error('ENOENT'); },
         probe: async () => 'limited',
         log: (msg) => logs.push(msg),
         pollMs: 1,
@@ -210,6 +268,45 @@ describe('watchForStall', () => {
     await watcher.done;
     assert.equal(limitCalls, 0);
     assert.ok(logs.some(l => l.includes('stall detection disabled')));
+  });
+});
+
+describe('latestTranscriptMtime', () => {
+  const os2 = require('os');
+  const fsp = require('fs/promises');
+
+  it('returns the max mtime across jsonl files and survives a resume-forked file', async () => {
+    // Build a fake transcript dir shaped like ~/.claude/projects/<sanitized>/
+    const tmp = await fsp.mkdtemp(path.join(os2.tmpdir(), 'lr-test-'));
+    const fakeHome = tmp;
+    const projectDir = '/tmp/fake-project';
+    const sanitized = path.resolve(projectDir).replace(/[^a-zA-Z0-9]/g, '-');
+    const dir = path.join(fakeHome, '.claude', 'projects', sanitized);
+    await fsp.mkdir(dir, { recursive: true });
+
+    const origHomedir = os2.homedir;
+    os2.homedir = () => fakeHome;
+    try {
+      const getMtime = latestTranscriptMtime(projectDir);
+      assert.equal(await getMtime(), null, 'no transcripts yet');
+
+      await fsp.writeFile(path.join(dir, 'old-session.jsonl'), 'x');
+      const first = await getMtime();
+      assert.ok(typeof first === 'number');
+
+      // Simulate --resume forking a new session file with later activity
+      await new Promise(r => setTimeout(r, 10));
+      await fsp.writeFile(path.join(dir, 'new-session.jsonl'), 'y');
+      const second = await getMtime();
+      assert.ok(second >= first, 'newest file wins');
+
+      // Non-jsonl files are ignored
+      await fsp.writeFile(path.join(dir, 'notes.txt'), 'z');
+      assert.equal(await getMtime(), second);
+    } finally {
+      os2.homedir = origHomedir;
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
   });
 });
 
@@ -317,7 +414,7 @@ describe('runSessionWithAutoResume', () => {
     const result = await runSessionWithAutoResume({
       spawnSession: () => { spawns++; return makeSession(); },
       saveSession: async () => { saves++; },
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       autoResume: true,
       deps: {
         probe: async () => { probeCalls++; return 'available'; },
@@ -347,7 +444,7 @@ describe('runSessionWithAutoResume', () => {
         return makeSession({ resolveOnTerminate: spawns === 1 });
       },
       saveSession: async () => { saves++; },
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       autoResume: true,
       deps: {
         // watcher confirms a limit on session 1 only
@@ -380,7 +477,7 @@ describe('runSessionWithAutoResume', () => {
     const result = await runSessionWithAutoResume({
       spawnSession: () => { spawns++; return makeSession(); },
       saveSession: async () => {},
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       autoResume: true,
       deps: {
         probe: async () => 'limited',
@@ -400,7 +497,7 @@ describe('runSessionWithAutoResume', () => {
     const result = await runSessionWithAutoResume({
       spawnSession: () => makeSession(),
       saveSession: async () => {},
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       autoResume: false,
       deps: {
         probe: async () => { probeCalls++; return 'limited'; },
@@ -419,7 +516,7 @@ describe('runSessionWithAutoResume', () => {
     const result = await runSessionWithAutoResume({
       spawnSession: () => makeSession({ resolveOnTerminate: true }),
       saveSession: async () => {},
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       windowEndTimeMs: Date.now() + 20,
       autoResume: true,
       deps: {
@@ -443,7 +540,7 @@ describe('runSessionWithAutoResume', () => {
         proc: { exit: () => {} }
       }),
       saveSession: async () => {},
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       autoResume: true,
       deps: {
         probe: async () => 'available',
@@ -467,7 +564,7 @@ describe('runSessionWithAutoResume', () => {
         proc: { exit: () => {} }
       }),
       saveSession: async () => {},
-      transcriptFile: '/fake/t.jsonl',
+      getTranscriptMtime: async () => 1,
       autoResume: true,
       deps: {
         now: () => t,

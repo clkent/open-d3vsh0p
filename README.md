@@ -74,7 +74,9 @@ Scaffolds a new repo, drops you into an interactive session with Riley. Describe
 
 Spawns Morgan to work through the roadmap. There is no session time limit or budget — the run continues until the roadmap is done, Morgan ends the session, or you stop it (Ctrl+C or /exit). Session branch auto-consolidates to main via PR when Morgan finishes.
 
-If your account's Claude usage limit stops Morgan mid-session, the run doesn't die: the orchestrator detects the stop (frozen session or early exit), prints `usage limit hit — next probe at HH:MM (Ctrl+C to stop)`, polls every 15 minutes, and resumes Morgan with full context once the limit window resets. Waits are bounded (max ~5.5h, max 2 auto-resumes per run, never past a scheduled window's end), and a single Ctrl+C during the wait ends the run normally. Pass `--no-auto-resume` to turn this off.
+If your account's Claude usage limit stops Morgan mid-session, the run doesn't die: the orchestrator detects the stop (frozen session or early exit), prints `usage limit hit — next probe at HH:MM (Ctrl+C to stop)`, polls every 15 minutes, and resumes Morgan with full context once the limit window resets. You don't need to answer the limit dialog in Morgan's session — the orchestrator terminates and resumes it automatically. Waits are bounded (max ~5.5h, max 2 auto-resumes per run, never past a scheduled window's end), and a single Ctrl+C during the wait ends the run normally. Pass `--no-auto-resume` to turn this off.
+
+For unattended runs (overnight), keep the Mac awake — the orchestrator can't poll while the machine sleeps: `caffeinate -i ./devshop run my-app`.
 
 ### talk — Chat with Riley mid-project
 

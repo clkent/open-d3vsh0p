@@ -7,7 +7,7 @@ const { TemplateEngine } = require('../agents/template-engine');
 const { resolveScheduleConfig, getWindowConfig, computeWindowEndTimeMs, VALID_WINDOWS } = require('../scheduler/window-config');
 const { generateSessionId } = require('../session/session-utils');
 const { spawnClaudeTerminal, saveCliSession, loadCliSession } = require('./cli-spawn');
-const { runSessionWithAutoResume, transcriptPath } = require('./limit-resume');
+const { runSessionWithAutoResume, latestTranscriptMtime } = require('./limit-resume');
 const { loadConfig } = require('../infra/config');
 
 const DEVSHOP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -196,7 +196,8 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
       initialPrompt: (resumeSessionId || isResume) ? continuationPrompt : initialPrompt
     }),
     saveSession: () => saveCliSession(stateDir, effectiveSessionId, 'run'),
-    transcriptFile: transcriptPath(config.projectDir, effectiveSessionId),
+    getTranscriptMtime: latestTranscriptMtime(config.projectDir),
+    model: morganConfig.model || null,
     windowEndTimeMs: config.windowEndTimeMs || null,
     autoResume: config.autoResume !== false
   });

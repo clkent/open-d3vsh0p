@@ -20,10 +20,13 @@ const PROBE_TIMEOUT_MS = 60 * 1000;
 /** SIGTERM → SIGKILL escalation grace. */
 const KILL_GRACE_MS = 10 * 1000;
 
-/** Cheapest model tier — the probe's answer is discarded, only its success matters. */
-const PROBE_MODEL = 'haiku';
+/** While a stall persists after a non-limited probe, re-probe this often. */
+const REPROBE_INTERVAL_MS = 15 * 60 * 1000;
 
-const LIMIT_PATTERN = /hit your (session|weekly)? ?limit|resets /i;
+// Matches known limit wordings across CLI versions and both output streams.
+// Over-matching (e.g. a transient rate-limit error) is benign: the wait loop
+// re-probes every 15 minutes and resumes on the first `available`.
+const LIMIT_PATTERN = /(hit|reached) your .{0,30}limit|usage limit|limit reached|resets /i;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,15 +45,53 @@ function transcriptPath(projectDir, sessionId) {
 }
 
 /**
- * Check whether the account can currently make Claude requests.
+ * Build an mtime source over the project's whole transcript directory: the
+ * max mtime across `*.jsonl` files, or null when none can be read. Tracking
+ * the newest transcript (not one fixed session file) keeps stall detection
+ * alive after `--resume`, which forks the conversation into a NEW session
+ * file — the old one never advances again. Only mtimes are read, never
+ * transcript contents.
  *
- * Spawns a minimal headless probe (argument array, never a shell) and
- * classifies the outcome. The probe's stderr is inspected for the limit
- * pattern but never echoed — subprocess output can carry ANSI escapes.
+ * @param {string} projectDir
+ * @returns {() => Promise<number|null>}
+ */
+function latestTranscriptMtime(projectDir) {
+  const sanitized = path.resolve(projectDir).replace(/[^a-zA-Z0-9]/g, '-');
+  const dir = path.join(os.homedir(), '.claude', 'projects', sanitized);
+  return async () => {
+    let files;
+    try {
+      files = await fs.readdir(dir);
+    } catch {
+      return null;
+    }
+    let max = null;
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      try {
+        const st = await fs.stat(path.join(dir, f));
+        if (max === null || st.mtimeMs > max) max = st.mtimeMs;
+      } catch { /* file vanished between readdir and stat */ }
+    }
+    return max;
+  };
+}
+
+/**
+ * Check whether Morgan's model can currently take Claude requests.
  *
+ * Spawns a minimal headless probe (argument array, never a shell) with the
+ * same model Morgan is configured to use — limits can be model-specific, so
+ * probing a different (cheaper) model can report `available` while Morgan is
+ * actually capped. Both stdout and stderr are inspected for the limit
+ * pattern (headless output routing varies across CLI versions) but never
+ * echoed — subprocess output can carry ANSI escapes.
+ *
+ * @param {object} [opts]
+ * @param {string|null} [opts.model] - Morgan's configured model; omitted → account default
  * @returns {Promise<'available'|'limited'|'unknown'>}
  */
-function probeAvailability({ spawnFn = spawn, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+function probeAvailability({ spawnFn = spawn, timeoutMs = PROBE_TIMEOUT_MS, model = null } = {}) {
   return new Promise((resolve) => {
     let settled = false;
     const done = (verdict) => {
@@ -60,20 +101,24 @@ function probeAvailability({ spawnFn = spawn, timeoutMs = PROBE_TIMEOUT_MS } = {
       }
     };
 
+    const args = ['-p', 'ok'];
+    if (model) args.push('--model', model);
+
     let proc;
     try {
-      proc = spawnFn('claude', ['-p', 'ok', '--model', PROBE_MODEL], {
+      proc = spawnFn('claude', args, {
         stdio: ['ignore', 'pipe', 'pipe']
       });
     } catch {
       return done('unknown');
     }
 
-    let stderr = '';
-    proc.stderr?.on('data', (chunk) => {
-      if (stderr.length < 8192) stderr += chunk.toString();
-    });
-    proc.stdout?.resume(); // drain and discard
+    let output = '';
+    const collect = (chunk) => {
+      if (output.length < 16384) output += chunk.toString();
+    };
+    proc.stderr?.on('data', collect);
+    proc.stdout?.on('data', collect);
 
     const timer = setTimeout(() => {
       try { proc.kill('SIGKILL'); } catch { /* already gone */ }
@@ -87,7 +132,7 @@ function probeAvailability({ spawnFn = spawn, timeoutMs = PROBE_TIMEOUT_MS } = {
     proc.on('exit', (code) => {
       clearTimeout(timer);
       if (code === 0) return done('available');
-      done(LIMIT_PATTERN.test(stderr) ? 'limited' : 'unknown');
+      done(LIMIT_PATTERN.test(output) ? 'limited' : 'unknown');
     });
   });
 }
@@ -103,21 +148,26 @@ function terminateWithGrace(proc, graceMs = KILL_GRACE_MS) {
 }
 
 /**
- * Watch a session transcript for a stall that indicates a frozen,
+ * Watch the session transcripts for a stall that indicates a frozen,
  * limit-stopped session. On a confirmed limit, calls onLimitDetected once
- * and stops. A stall with the account still available is benign idle —
- * the watcher backs off until new transcript activity precedes a fresh stall.
+ * and stops. A stall with the model still available is treated as idle for
+ * now — but the watcher keeps re-probing on an interval while the stall
+ * persists, so a misclassified probe (wording drift, transient network
+ * error, wrong stream) delays detection instead of killing it. Fresh
+ * transcript activity resets the cycle.
  *
+ * @param {object} opts
+ * @param {() => Promise<number|null>} opts.getMtime - newest transcript mtime, null when unreadable
  * Returns { stop, done }. done resolves when the watcher exits.
  */
-function watchForStall({ transcriptFile, onLimitDetected, deps = {} }) {
+function watchForStall({ getMtime, onLimitDetected, deps = {} }) {
   const {
-    statFn = (p) => fs.stat(p),
     probe = probeAvailability,
     now = Date.now,
     log = console.log,
     pollMs = TRANSCRIPT_POLL_MS,
-    stallThresholdMs = STALL_THRESHOLD_MS
+    stallThresholdMs = STALL_THRESHOLD_MS,
+    reprobeIntervalMs = REPROBE_INTERVAL_MS
   } = deps;
 
   let stopped = false;
@@ -132,17 +182,15 @@ function watchForStall({ transcriptFile, onLimitDetected, deps = {} }) {
   const done = (async () => {
     let lastMtime = null;
     let lastChangeAt = now();
-    let armed = true;
+    let lastProbeAt = null;
     let missingChecks = 0;
 
     while (!stopped) {
       await sleep(pollMs);
       if (stopped) break;
 
-      let st;
-      try {
-        st = await statFn(transcriptFile);
-      } catch {
+      const mtime = await getMtime();
+      if (mtime === null) {
         missingChecks++;
         if (missingChecks >= 3) {
           log('  ~ [limit-watch] Session transcript not found — stall detection disabled for this run.');
@@ -152,23 +200,25 @@ function watchForStall({ transcriptFile, onLimitDetected, deps = {} }) {
       }
       missingChecks = 0;
 
-      if (lastMtime === null || st.mtimeMs !== lastMtime) {
-        lastMtime = st.mtimeMs;
+      if (lastMtime === null || mtime !== lastMtime) {
+        lastMtime = mtime;
         lastChangeAt = now();
-        armed = true;
+        lastProbeAt = null;
         continue;
       }
 
-      if (armed && now() - lastChangeAt >= stallThresholdMs) {
+      const stalled = now() - lastChangeAt >= stallThresholdMs;
+      const probeDue = lastProbeAt === null || now() - lastProbeAt >= reprobeIntervalMs;
+      if (stalled && probeDue) {
+        lastProbeAt = now();
         const verdict = await probe();
         if (stopped) break;
         if (verdict === 'limited') {
           onLimitDetected();
           return;
         }
-        // Benign idle (or unknown — never treated as confirmation):
-        // don't probe again until activity resumes and a fresh stall occurs.
-        armed = false;
+        // available/unknown: keep watching; re-probe after reprobeIntervalMs
+        // for as long as the stall persists.
       }
     }
   })();
@@ -260,7 +310,8 @@ async function waitForLimitReset({ resumeCount = 0, windowEndTimeMs = null, deps
  * @param {object} opts
  * @param {function} opts.spawnSession - ({ isResume }) => { promise, proc }
  * @param {function} opts.saveSession - async, called after every exit
- * @param {string|null} opts.transcriptFile - transcript to watch (null disables stall detection)
+ * @param {(() => Promise<number|null>)|null} opts.getTranscriptMtime - newest transcript mtime source (null disables stall detection)
+ * @param {string|null} opts.model - Morgan's configured model; the probe mirrors it
  * @param {number|null} opts.windowEndTimeMs - absolute deadline (scheduled windows); null = unbounded
  * @param {boolean} opts.autoResume
  * @returns {Promise<{timedOut: boolean, autoResumeCount: number, giveUpReason: string|null}>}
@@ -268,13 +319,17 @@ async function waitForLimitReset({ resumeCount = 0, windowEndTimeMs = null, deps
 async function runSessionWithAutoResume({
   spawnSession,
   saveSession,
-  transcriptFile = null,
+  getTranscriptMtime = null,
+  model = null,
   windowEndTimeMs = null,
   autoResume = true,
   deps = {}
 }) {
+  // Every probe (stall watcher, early-exit check, wait loop) asks the same
+  // question — "can Morgan continue?" — so all of them use Morgan's model.
+  deps = { probe: () => probeAvailability({ model }), ...deps };
   const {
-    probe = probeAvailability,
+    probe,
     now = Date.now,
     log = console.log,
     terminate = terminateWithGrace,
@@ -301,8 +356,8 @@ async function runSessionWithAutoResume({
     }, deadlineMs) : null;
 
     let limitDetected = false;
-    const watcher = (autoResume && transcriptFile) ? watch({
-      transcriptFile,
+    const watcher = (autoResume && getTranscriptMtime) ? watch({
+      getMtime: getTranscriptMtime,
       deps,
       onLimitDetected: () => {
         limitDetected = true;
@@ -346,16 +401,17 @@ async function runSessionWithAutoResume({
 module.exports = {
   STALL_THRESHOLD_MS,
   PROBE_INTERVAL_MS,
+  REPROBE_INTERVAL_MS,
   MAX_WAIT_MS,
   MAX_AUTO_RESUMES,
   MIN_REMAINING_MS,
   TRANSCRIPT_POLL_MS,
   PROBE_TIMEOUT_MS,
   KILL_GRACE_MS,
-  PROBE_MODEL,
   LIMIT_PATTERN,
   isValidSessionId,
   transcriptPath,
+  latestTranscriptMtime,
   probeAvailability,
   terminateWithGrace,
   watchForStall,
