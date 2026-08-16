@@ -224,6 +224,10 @@
 ### Group A: Auto-Resume
 - [x] `limit-aware-resume` — When the account usage limit stops Morgan (frozen interactive session detected via transcript-mtime stall, or early exit), `run` confirms it with a cheap availability probe, polls until the limit window resets, then respawns Morgan with `--resume` (context intact); time limit counts active session time only, respects window end, caps resume attempts, and can be disabled with `--no-auto-resume`
 
+### Group B: Unattended Reliability
+<!-- depends: Phase XVIII Group A -->
+- [ ] `limit-detection-hardening` — Fix field failure where a limit-frozen session was never detected: probe reads stdout+stderr with a broadened limit pattern, probes with Morgan's configured model (catches model-specific caps), the stall watcher re-probes on a 15-min interval instead of disarming after one non-limited verdict, and transcript tracking follows the newest `.jsonl` in the project dir so detection survives `--resume`
+
 ## Phase XIX: Unbounded Runs
 <!-- depends: Phase XVIII -->
 
