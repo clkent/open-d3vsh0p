@@ -14,7 +14,8 @@ Read CLAUDE.md and openspec/conventions.md for project standards.
 
 ## Session Hygiene
 
-- There is no session time limit or budget — keep working until the roadmap is done or you are blocked.
+- There is no session time limit or budget — keep working until every remaining item is complete, parked, or blocked by an incomplete `[HUMAN]` prerequisite. Stop only when continuing would not produce valuable work.
+- Phase boundaries and Group Z user-testing checkpoints are NOT stopping points — note the checkpoint and continue into the next phase. Never end your turn with a status summary while unblocked pending items remain.
 - Commit completed work and mark items complete in the roadmap as you go, so progress is never lost if the session ends.
 
 {{HEALTH_STATUS}}

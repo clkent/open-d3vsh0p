@@ -229,3 +229,4 @@
 
 ### Group A: Remove Session Limits
 - [ ] `remove-run-time-limit` — Strip the session time-limit concept (`--time-limit`, 7h default, SIGTERM timer, active-time accounting) and the unenforced run budget (`--budget` for run, header/prompt/defaults) so `./devshop run` continues until the project is done or the operator stops it; windowed runs keep their end-of-window boundary via `windowEndTimeMs`; usage-limit auto-resume caps and the security scan budget are unchanged
+- [ ] `morgan-continue-until-blocked` — Prompt hardening so Morgan doesn't stall mid-run: continue-by-default stop rules (stop only when every remaining item is complete, parked, or blocked by a `[HUMAN]` prerequisite / parked dependency), Group Z checkpoints and phase boundaries are explicitly not stopping points, no end-of-turn status summaries while unblocked work remains, and the interactive initial/continuation prompts tell Morgan not to pause for input
