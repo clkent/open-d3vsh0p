@@ -90,14 +90,8 @@ function validateScheduleConfig(schedule) {
       errors.push(`${name}: startHour (${win.startHour}) must be less than endHour (${win.endHour})`);
     }
 
-    if (win.budgetUsd !== undefined && win.budgetUsd <= 0) {
-      errors.push(`${name}: budgetUsd must be positive`);
-    }
-
-    if (win.timeLimitHours !== undefined && win.timeLimitHours <= 0) {
-      errors.push(`${name}: timeLimitHours must be positive`);
-    }
-
+    // Legacy budgetUsd/timeLimitHours keys are tolerated and ignored —
+    // the window's endHour is the run's only time boundary.
     windowRanges.push({ name, start: win.startHour, end: win.endHour });
   }
 

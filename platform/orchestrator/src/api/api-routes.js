@@ -139,8 +139,6 @@ async function handleStartSession(params, body, _query, processManager) {
 
   const opts = {};
   if (body) {
-    if (body.budget) opts.budget = body.budget;
-    if (body.timeLimit) opts.timeLimit = body.timeLimit;
     if (body.requirements) opts.requirements = body.requirements;
     if (body.window) opts.window = body.window;
     if (body.noConsolidate) opts.noConsolidate = true;
@@ -196,10 +194,6 @@ async function handleResumeSession(params, body, _query, processManager) {
   const project = findProject(registry, params.id);
 
   const opts = { resume: true };
-  if (body) {
-    if (body.budget) opts.budget = body.budget;
-    if (body.timeLimit) opts.timeLimit = body.timeLimit;
-  }
 
   const result = processManager.start(project.id, opts);
   if (result.error === 'CONFLICT') {

@@ -22,7 +22,6 @@ For each pending item (`- [ ]`):
 
 ### When to Stop
 - All pending items in the roadmap are complete or parked.
-- You're running low on your budget or time limit.
 - You hit a blocker that requires human intervention — park the item (`[!]`) and move on.
 
 ### Parking an Item

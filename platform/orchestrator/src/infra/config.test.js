@@ -69,8 +69,8 @@ describe('config', () => {
   describe('loadDefaults', () => {
     it('loads defaults.json and returns expected default values', async () => {
       const defaults = await loadDefaults();
-      assert.equal(defaults.budgetLimitUsd, 30);
-      assert.equal(defaults.timeLimitMs, 25200000);
+      assert.equal(defaults.budgetLimitUsd, undefined, 'no session budget default');
+      assert.equal(defaults.timeLimitMs, undefined, 'no session time-limit default');
       assert.deepEqual(Object.keys(defaults.agents).sort(), ['pair', 'pm', 'principal-engineer', 'security']);
     });
 
@@ -85,7 +85,6 @@ describe('config', () => {
   describe('loadConfig', () => {
     it('returns defaults when no overrides', async () => {
       const config = await loadConfig({});
-      assert.equal(config.budgetLimitUsd, 30);
       assert.equal(config.healthCheck.timeoutMs, 120000);
     });
 
@@ -97,7 +96,7 @@ describe('config', () => {
       // Mock readFile to intercept override path
       fs.readFile = async (filePath, ...args) => {
         if (filePath.includes('orchestrator/config.json')) {
-          return JSON.stringify({ budgetLimitUsd: 50, healthCheck: { timeoutMs: 60000 } });
+          return JSON.stringify({ healthCheck: { timeoutMs: 60000 } });
         }
         return realReadFile(filePath, ...args);
       };
@@ -107,7 +106,6 @@ describe('config', () => {
       const { loadConfig: lc } = require('./config');
 
       const config = await lc({ activeAgentsDir: '/tmp/fake-agents' });
-      assert.equal(config.budgetLimitUsd, 50);
       assert.equal(config.healthCheck.timeoutMs, 60000);
       // Unmodified defaults should still be present
       assert.equal(config.healthCheck.nativeBuildTimeoutMs, 300000);
@@ -115,13 +113,23 @@ describe('config', () => {
       fs.readFile = originalReadFile;
     });
 
-    it('CLI budget/time override take highest priority', async () => {
-      const config = await loadConfig({
-        budgetLimitUsd: 100,
-        timeLimitMs: 999
-      });
-      assert.equal(config.budgetLimitUsd, 100);
-      assert.equal(config.timeLimitMs, 999);
+    it('tolerates legacy budget/time keys in project override files', async () => {
+      originalReadFile = fs.readFile;
+      const realReadFile = originalReadFile;
+      fs.readFile = async (filePath, ...args) => {
+        if (filePath.includes('orchestrator/config.json')) {
+          return JSON.stringify({ budgetLimitUsd: 50, timeLimitMs: 999, healthCheck: { timeoutMs: 60000 } });
+        }
+        return realReadFile(filePath, ...args);
+      };
+      delete require.cache[require.resolve('./config')];
+      const { loadConfig: lc } = require('./config');
+
+      const config = await lc({ activeAgentsDir: '/tmp/fake-agents' });
+      // Legacy keys merge without error; nothing consumes them
+      assert.equal(config.healthCheck.timeoutMs, 60000);
+
+      fs.readFile = originalReadFile;
     });
 
     it('handles missing override file gracefully', async () => {
@@ -129,7 +137,7 @@ describe('config', () => {
         activeAgentsDir: '/tmp/definitely-does-not-exist-' + Date.now()
       });
       // Should fall back to defaults without throwing
-      assert.equal(typeof config.budgetLimitUsd, 'number');
+      assert.equal(typeof config.healthCheck, 'object');
     });
   });
 });

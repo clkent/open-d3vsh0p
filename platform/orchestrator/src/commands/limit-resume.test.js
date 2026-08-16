@@ -318,7 +318,6 @@ describe('runSessionWithAutoResume', () => {
       spawnSession: () => { spawns++; return makeSession(); },
       saveSession: async () => { saves++; },
       transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 3600000,
       autoResume: true,
       deps: {
         probe: async () => { probeCalls++; return 'available'; },
@@ -349,7 +348,6 @@ describe('runSessionWithAutoResume', () => {
       },
       saveSession: async () => { saves++; },
       transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 3600000,
       autoResume: true,
       deps: {
         // watcher confirms a limit on session 1 only
@@ -383,7 +381,6 @@ describe('runSessionWithAutoResume', () => {
       spawnSession: () => { spawns++; return makeSession(); },
       saveSession: async () => {},
       transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 3600000,
       autoResume: true,
       deps: {
         probe: async () => 'limited',
@@ -404,7 +401,6 @@ describe('runSessionWithAutoResume', () => {
       spawnSession: () => makeSession(),
       saveSession: async () => {},
       transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 3600000,
       autoResume: false,
       deps: {
         probe: async () => { probeCalls++; return 'limited'; },
@@ -418,13 +414,13 @@ describe('runSessionWithAutoResume', () => {
     assert.equal(result.autoResumeCount, 0);
   });
 
-  it('time limit terminates the session and skips probing', async () => {
+  it('window-end deadline terminates the session and skips probing', async () => {
     let probeCalls = 0;
     const result = await runSessionWithAutoResume({
       spawnSession: () => makeSession({ resolveOnTerminate: true }),
       saveSession: async () => {},
       transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 20,
+      windowEndTimeMs: Date.now() + 20,
       autoResume: true,
       deps: {
         probe: async () => { probeCalls++; return 'limited'; },
@@ -439,55 +435,49 @@ describe('runSessionWithAutoResume', () => {
     assert.equal(result.autoResumeCount, 0);
   });
 
-  it('counts only active session time, excluding limit waits', async () => {
-    let t = 0;
-    let spawns = 0;
-    const result = await runSessionWithAutoResume({
-      spawnSession: () => {
-        spawns++;
-        return {
-          promise: Promise.resolve().then(() => { t += 100; }),
-          proc: { exit: () => {} }
-        };
-      },
-      saveSession: async () => {},
-      transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 3600000,
-      autoResume: true,
-      deps: {
-        now: () => t,
-        probe: async () => (spawns === 1 ? 'limited' : 'available'),
-        wait: async () => { t += 5000000; return { verdict: 'resume', reason: 'limit_lifted' }; },
-        watch: noopWatch,
-        log: () => {}
-      }
-    });
-    assert.equal(spawns, 2);
-    assert.equal(result.activeElapsedMs, 200, 'wait time (5000000ms) excluded from active time');
-  });
-
-  it('does not resume when remaining budget is under the floor', async () => {
-    let waitCalls = 0;
-    let t = 0;
+  it('plain run (no windowEndTimeMs) never arms a termination timer', async () => {
+    let terminateCalls = 0;
     const result = await runSessionWithAutoResume({
       spawnSession: () => ({
-        promise: Promise.resolve().then(() => { t += 100; }),
+        promise: new Promise(r => setTimeout(r, 50)),
         proc: { exit: () => {} }
       }),
       saveSession: async () => {},
       transcriptFile: '/fake/t.jsonl',
-      timeLimitMs: 150, // 100 elapsed → 50 remaining, under the 60ms floor below
+      autoResume: true,
+      deps: {
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        watch: noopWatch,
+        terminate: () => { terminateCalls++; },
+        log: () => {}
+      }
+    });
+    assert.equal(terminateCalls, 0);
+    assert.ok(!result.timedOut);
+  });
+
+  it('probes on every non-deadline exit, even after a long session', async () => {
+    let probeCalls = 0;
+    let t = 0;
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => ({
+        // session consumes 10 hours of clock — no time budget exists to exhaust
+        promise: Promise.resolve().then(() => { t += 36000000; }),
+        proc: { exit: () => {} }
+      }),
+      saveSession: async () => {},
+      transcriptFile: '/fake/t.jsonl',
       autoResume: true,
       deps: {
         now: () => t,
-        minRemainingMs: 60,
-        probe: async () => 'limited',
-        wait: async () => { waitCalls++; return { verdict: 'resume', reason: 'x' }; },
+        probe: async () => { probeCalls++; return 'available'; },
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
         watch: noopWatch,
         log: () => {}
       }
     });
-    assert.equal(waitCalls, 0);
+    assert.equal(probeCalls, 1, 'exit probed despite 10h elapsed');
     assert.equal(result.autoResumeCount, 0);
   });
 });

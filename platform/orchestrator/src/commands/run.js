@@ -38,18 +38,7 @@ async function runCommand(project, config, registry, saveRegistry) {
       return await handleMorningDigest(project, config);
     }
 
-    // Apply window budget/time unless CLI explicitly overrode
-    const cliUsedDefaultBudget = config.budgetLimitUsd === 30;
-    const cliUsedDefaultTime = config.timeLimitMs === 7 * 3600000;
-
-    if (cliUsedDefaultBudget && winConfig.budgetUsd) {
-      config.budgetLimitUsd = winConfig.budgetUsd;
-    }
-
-    if (cliUsedDefaultTime && winConfig.timeLimitHours) {
-      config.timeLimitMs = winConfig.timeLimitHours * 3600000;
-    }
-
+    // The window's end hour is the run's only time boundary
     config.windowEndTimeMs = computeWindowEndTimeMs(winConfig.endHour);
   }
 
@@ -95,15 +84,10 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   } catch { /* not a git repo or no commits yet */ }
 
   // Print session header
-  const budgetUsd = config.budgetLimitUsd;
-  const timeLimitHours = (config.timeLimitMs / 3600000).toFixed(1);
-
   console.log('');
   console.log('=== DevShop — Morgan Orchestrator ===');
   console.log(`  Project:    ${project.name} (${project.id})`);
   console.log(`  Directory:  ${project.projectDir}`);
-  console.log(`  Budget:     $${budgetUsd.toFixed(2)}`);
-  console.log(`  Time limit: ${timeLimitHours}h`);
   if (windowName) {
     console.log(`  Window:     ${windowName}`);
     if (config.windowEndTimeMs) {
@@ -146,7 +130,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
 
   const isAutonomous = !!windowName;
   const autonomousMode = isAutonomous
-    ? `## Autonomous Mode\n\nYou are running autonomously via the scheduler (window: ${windowName}). Do NOT wait for user input — make decisions independently. Work through items until you run out of budget/time or complete everything. If you encounter a blocker, park the item and move on.`
+    ? `## Autonomous Mode\n\nYou are running autonomously via the scheduler (window: ${windowName}). Do NOT wait for user input — make decisions independently. Work through items until everything is complete or blocked. If you encounter a blocker, park the item and move on.`
     : '';
 
   const templateVars = {
@@ -156,8 +140,6 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     TECH_STACK: techStack,
     ROADMAP_CONTENT: roadmapContent,
     CONVENTIONS: conventions,
-    BUDGET_USD: budgetUsd.toFixed(2),
-    TIME_LIMIT_HOURS: timeLimitHours,
     HEALTH_STATUS: healthStatus,
     AUTONOMOUS_MODE: autonomousMode
   };
@@ -199,10 +181,10 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   const effectiveSessionId = claudeSessionId || resumeSessionId;
   const continuationPrompt = `Continue working through the roadmap from where you left off. Check roadmap.md for pending items.${healthStatus ? `\n\n${healthStatus}` : ''}`;
 
-  // Spawn Morgan inside the limit-aware session loop: enforces the time
-  // limit against active session time, detects a usage-limit stop (frozen
-  // session or early exit), waits out the limit window, and auto-resumes —
-  // unless --no-auto-resume was passed.
+  // Spawn Morgan inside the limit-aware session loop: enforces the window-end
+  // deadline (scheduled windows only — plain runs are unbounded), detects a
+  // usage-limit stop (frozen session or early exit), waits out the limit
+  // window, and auto-resumes — unless --no-auto-resume was passed.
   const { timedOut, autoResumeCount } = await runSessionWithAutoResume({
     spawnSession: ({ isResume }) => spawnClaudeTerminal({
       projectDir: config.projectDir,
@@ -215,7 +197,6 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     }),
     saveSession: () => saveCliSession(stateDir, effectiveSessionId, 'run'),
     transcriptFile: transcriptPath(config.projectDir, effectiveSessionId),
-    timeLimitMs: config.timeLimitMs || null,
     windowEndTimeMs: config.windowEndTimeMs || null,
     autoResume: config.autoResume !== false
   });
@@ -254,7 +235,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   console.log(`  Parked:      ${parkedItems.length} items`);
   console.log(`  Remaining:   ${pendingItems.length} items`);
   if (timedOut) {
-    console.log(`  Stop reason: time_limit`);
+    console.log(`  Stop reason: window_end`);
   }
   if (autoResumeCount > 0) {
     console.log(`  Auto-resumes: ${autoResumeCount} (after usage-limit waits)`);
@@ -287,7 +268,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
       completed: itemsCompleted,
       parked: parkedItems.length,
       remaining: pendingItems.length,
-      stopReason: timedOut ? 'time_limit' : 'session_ended'
+      stopReason: timedOut ? 'window_end' : 'session_ended'
     }, windowName);
   }
 

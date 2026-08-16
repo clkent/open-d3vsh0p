@@ -43,17 +43,9 @@ async function loadConfig(cliOptions) {
     ? await loadProjectOverrides(cliOptions.activeAgentsDir)
     : {};
 
-  const config = deepMerge(defaults, overrides);
-
-  // CLI options take highest priority
-  if (cliOptions.budgetLimitUsd !== undefined) {
-    config.budgetLimitUsd = cliOptions.budgetLimitUsd;
-  }
-  if (cliOptions.timeLimitMs !== undefined) {
-    config.timeLimitMs = cliOptions.timeLimitMs;
-  }
-
-  return config;
+  // Legacy project override files may still carry budgetLimitUsd/timeLimitMs;
+  // they merge harmlessly — nothing consumes them anymore.
+  return deepMerge(defaults, overrides);
 }
 
 // loadDefaults, deepMerge exported for testing

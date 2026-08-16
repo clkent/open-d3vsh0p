@@ -55,20 +55,11 @@ describe('window-config', () => {
       assert.ok(result.errors.some(e => e.includes('must be less than')));
     });
 
-    it('returns error for negative budgetUsd', () => {
+    it('tolerates legacy budgetUsd/timeLimitHours keys without error', () => {
       const result = validateScheduleConfig({
-        windows: { morning: { enabled: true, startHour: 8, endHour: 12, budgetUsd: -5 } }
+        windows: { morning: { enabled: true, startHour: 8, endHour: 12, budgetUsd: -5, timeLimitHours: 0 } }
       });
-      assert.equal(result.valid, false);
-      assert.ok(result.errors.some(e => e.includes('budgetUsd')));
-    });
-
-    it('returns error for zero timeLimitHours', () => {
-      const result = validateScheduleConfig({
-        windows: { morning: { enabled: true, startHour: 8, endHour: 12, timeLimitHours: 0 } }
-      });
-      assert.equal(result.valid, false);
-      assert.ok(result.errors.some(e => e.includes('timeLimitHours')));
+      assert.equal(result.valid, true);
     });
 
     it('detects overlapping windows', () => {

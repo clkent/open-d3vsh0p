@@ -12,8 +12,8 @@ async function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
+      // --budget applies to the security command only (enforced scan cap)
       budget: { type: 'string', default: '30' },
-      'time-limit': { type: 'string', default: '7' },
       resume: { type: 'boolean', default: false },
       fresh: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
@@ -112,8 +112,6 @@ async function main() {
     projectId: project.id,
     projectDir: project.projectDir,
     githubRepo: project.githubRepo,
-    budgetLimitUsd: parseFloat(values.budget),
-    timeLimitMs: parseFloat(values['time-limit']) * 3600000,
     resume: values.resume,
     fresh: values.fresh,
     dryRun: values['dry-run'],
@@ -226,8 +224,6 @@ Session commands (during kickoff, plan, talk, pair):
   done      Save session and exit
 
 Options:
-  --budget <usd>           Session budget limit (default: 30)
-  --time-limit <hours>     Session time limit (default: 7)
   --resume                 Resume a previously interrupted session
   --no-auto-resume         Don't auto-resume after a usage-limit stop (run)
   --fresh                  Start a fresh session (ignore saved state)
@@ -238,6 +234,7 @@ Options:
   --no-consolidate         Skip auto-consolidation of session branch to main
   --port <port>            Port for api command (default: 3200)
   --focus <areas>          Security scan focus (comma-separated: secrets,deps,injection,auth,config)
+  --budget <usd>           Security scan budget cap (default: 30)
   --timeout <minutes>      Security scan timeout in minutes (default: 5)
   --schedule <freq>        Schedule recurring security scans (weekly)
   --unschedule             Remove scheduled security scans
@@ -248,7 +245,6 @@ Examples:
   ./devshop kickoff my-app --design
   ./devshop plan my-app
   ./devshop run my-app
-  ./devshop run my-app --budget 10 --time-limit 4
   ./devshop run my-app --window night
   ./devshop run my-app --requirements user-authentication
   ./devshop status my-app

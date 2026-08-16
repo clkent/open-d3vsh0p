@@ -5,9 +5,7 @@
       "night": {
         "enabled": true,
         "startHour": 1,
-        "endHour": 8,
-        "budgetUsd": 15,
-        "timeLimitHours": 6
+        "endHour": 8
       },
       "morning": {
         "enabled": true,
@@ -18,9 +16,7 @@
       "day": {
         "enabled": true,
         "startHour": 12,
-        "endHour": 17,
-        "budgetUsd": 20,
-        "timeLimitHours": 7
+        "endHour": 17
       }
     },
     "cadence": {
