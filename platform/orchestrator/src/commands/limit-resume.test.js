@@ -252,6 +252,50 @@ describe('watchForStall', () => {
     assert.equal(limitCalls, 1);
   });
 
+  it('calls onIdleAvailable on an available stall and stops when handled', async () => {
+    let t = 0;
+    let idleCalls = 0;
+    let probeCalls = 0;
+    const watcher = watchForStall({
+      getMtime: async () => { t += 10; return 100; },
+      onLimitDetected: () => {},
+      onIdleAvailable: async () => { idleCalls++; return true; },
+      deps: {
+        probe: async () => { probeCalls++; return 'available'; },
+        now: () => t,
+        log: () => {},
+        pollMs: 1,
+        stallThresholdMs: 5
+      }
+    });
+    await watcher.done;
+    assert.equal(idleCalls, 1);
+    assert.equal(probeCalls, 1, 'stopped watching once the caller took over');
+  });
+
+  it('keeps re-probing when onIdleAvailable declines to handle the idle', async () => {
+    let t = 0;
+    let idleCalls = 0;
+    let limitCalls = 0;
+    const watcher = watchForStall({
+      getMtime: async () => { t += 10; return 100; },
+      onLimitDetected: () => { limitCalls++; },
+      onIdleAvailable: async () => { idleCalls++; return false; },
+      deps: {
+        // third probe finds a real limit
+        probe: async () => (idleCalls >= 2 ? 'limited' : 'available'),
+        now: () => t,
+        log: () => {},
+        pollMs: 1,
+        stallThresholdMs: 5,
+        reprobeIntervalMs: 20
+      }
+    });
+    await watcher.done;
+    assert.equal(idleCalls, 2, 'declined idles did not stop the watcher');
+    assert.equal(limitCalls, 1);
+  });
+
   it('self-disables with a warning when no transcript can be read', async () => {
     const logs = [];
     let limitCalls = 0;
@@ -552,6 +596,142 @@ describe('runSessionWithAutoResume', () => {
     });
     assert.equal(terminateCalls, 0);
     assert.ok(!result.timedOut);
+  });
+
+  /**
+   * Watcher stub that fires an idle-available on the Nth spawned session,
+   * mimicking Morgan ending a turn while the process waits for input.
+   */
+  function idleOnSession(sessionNumbers) {
+    let call = 0;
+    return ({ onIdleAvailable, onLimitDetected }) => {
+      call++;
+      if (sessionNumbers.includes(call) && onIdleAvailable) {
+        setImmediate(async () => { await onIdleAvailable(); });
+      }
+      return { stop: () => {}, done: Promise.resolve() };
+    };
+  }
+
+  it('continues an idle Morgan when unblocked work remains', async () => {
+    let spawns = 0;
+    const spawnArgs = [];
+    const result = await runSessionWithAutoResume({
+      spawnSession: ({ isResume, reason }) => {
+        spawns++;
+        spawnArgs.push({ isResume, reason });
+        return makeSession({ resolveOnTerminate: spawns === 1 });
+      },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      hasPendingWork: async () => true,
+      getProgressSignature: async () => `sig-${spawns}`, // progress each round
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        log: () => {}
+      }
+    });
+    assert.equal(spawns, 2, 'idle session was continued');
+    assert.equal(result.nudgeCount, 1);
+    assert.deepEqual(spawnArgs[1], { isResume: true, reason: 'nudge' });
+  });
+
+  it('does not continue when no unblocked work remains', async () => {
+    let spawns = 0;
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => { spawns++; return makeSession(); },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      hasPendingWork: async () => false,
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        log: () => {}
+      }
+    });
+    assert.equal(spawns, 1);
+    assert.equal(result.nudgeCount, 0);
+  });
+
+  it('caps futile continuations that produce no progress', async () => {
+    let spawns = 0;
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => {
+        spawns++;
+        return makeSession({ resolveOnTerminate: true });
+      },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      hasPendingWork: async () => true,
+      getProgressSignature: async () => 'frozen', // never changes
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1, 2, 3, 4, 5]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        maxFutileNudges: 3,
+        log: () => {}
+      }
+    });
+    assert.equal(result.giveUpReason, 'futile_nudges');
+    assert.equal(result.nudgeCount, 2, 'stopped at the cap instead of looping');
+    assert.equal(spawns, 3);
+  });
+
+  it('progress resets the futile-continuation counter', async () => {
+    let spawns = 0;
+    // no progress, no progress, then progress, then no progress ×3 → cap
+    const sigs = ['a', 'a', 'a', 'b', 'b', 'b', 'b'];
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => {
+        spawns++;
+        return makeSession({ resolveOnTerminate: true });
+      },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      hasPendingWork: async () => true,
+      getProgressSignature: async () => sigs.shift() ?? 'z',
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1, 2, 3, 4, 5, 6, 7]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        maxFutileNudges: 3,
+        log: () => {}
+      }
+    });
+    // Without the reset the run would have ended after 3 spawns
+    assert.ok(spawns > 3, `progress extended the run (spawns=${spawns})`);
+    assert.equal(result.giveUpReason, 'futile_nudges');
+  });
+
+  it('--no-auto-resume disables idle continuation', async () => {
+    let spawns = 0;
+    let watchCalls = 0;
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => { spawns++; return makeSession(); },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      hasPendingWork: async () => true,
+      autoResume: false,
+      deps: {
+        watch: () => { watchCalls++; return noopWatch(); },
+        probe: async () => 'available',
+        log: () => {}
+      }
+    });
+    assert.equal(watchCalls, 0);
+    assert.equal(spawns, 1);
+    assert.equal(result.nudgeCount, 0);
   });
 
   it('probes on every non-deadline exit, even after a long session', async () => {

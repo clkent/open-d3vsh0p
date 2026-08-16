@@ -22,6 +22,8 @@ const KILL_GRACE_MS = 10 * 1000;
 
 /** While a stall persists after a non-limited probe, re-probe this often. */
 const REPROBE_INTERVAL_MS = 15 * 60 * 1000;
+/** Consecutive idle continuations with no progress before concluding the run. */
+const MAX_FUTILE_NUDGES = 3;
 
 // Matches known limit wordings across CLI versions and both output streams.
 // Over-matching (e.g. a transient rate-limit error) is benign: the wait loop
@@ -148,19 +150,25 @@ function terminateWithGrace(proc, graceMs = KILL_GRACE_MS) {
 }
 
 /**
- * Watch the session transcripts for a stall that indicates a frozen,
- * limit-stopped session. On a confirmed limit, calls onLimitDetected once
- * and stops. A stall with the model still available is treated as idle for
- * now — but the watcher keeps re-probing on an interval while the stall
- * persists, so a misclassified probe (wording drift, transient network
+ * Watch the session transcripts for a stall — either a frozen limit-stopped
+ * session, or an idle one that ended its turn and is waiting for input
+ * (an interactive `claude` never exits at end of turn).
+ *
+ * On a confirmed limit, calls onLimitDetected once and stops. On a stall
+ * with the model still AVAILABLE, calls onIdleAvailable: the run loop
+ * decides whether unfinished roadmap work justifies nudging Morgan onward;
+ * it returns true when it is handling the idle (terminating the process),
+ * which stops the watcher. Otherwise the watcher keeps re-probing on an
+ * interval, so a misclassified probe (wording drift, transient network
  * error, wrong stream) delays detection instead of killing it. Fresh
  * transcript activity resets the cycle.
  *
  * @param {object} opts
  * @param {() => Promise<number|null>} opts.getMtime - newest transcript mtime, null when unreadable
+ * @param {() => Promise<boolean>} [opts.onIdleAvailable] - returns true when handling the idle
  * Returns { stop, done }. done resolves when the watcher exits.
  */
-function watchForStall({ getMtime, onLimitDetected, deps = {} }) {
+function watchForStall({ getMtime, onLimitDetected, onIdleAvailable = null, deps = {} }) {
   const {
     probe = probeAvailability,
     now = Date.now,
@@ -217,8 +225,16 @@ function watchForStall({ getMtime, onLimitDetected, deps = {} }) {
           onLimitDetected();
           return;
         }
-        // available/unknown: keep watching; re-probe after reprobeIntervalMs
-        // for as long as the stall persists.
+        if (verdict === 'available' && onIdleAvailable) {
+          // Idle, not limited: Morgan ended his turn (e.g. Claude Code's
+          // "usage limit approaching — checkpoint now" injection) and the
+          // process is waiting for input that will never come.
+          const handled = await onIdleAvailable();
+          if (stopped) break;
+          if (handled) return;
+        }
+        // Not handled: keep watching; re-probe after reprobeIntervalMs for
+        // as long as the stall persists.
       }
     }
   })();
@@ -308,19 +324,23 @@ async function waitForLimitReset({ resumeCount = 0, windowEndTimeMs = null, deps
  * probing, the bounded wait loop, and respawn via the caller's spawnSession.
  *
  * @param {object} opts
- * @param {function} opts.spawnSession - ({ isResume }) => { promise, proc }
+ * @param {function} opts.spawnSession - ({ isResume, reason }) => { promise, proc }
  * @param {function} opts.saveSession - async, called after every exit
  * @param {(() => Promise<number|null>)|null} opts.getTranscriptMtime - newest transcript mtime source (null disables stall detection)
  * @param {string|null} opts.model - Morgan's configured model; the probe mirrors it
+ * @param {(() => Promise<boolean>)|null} opts.hasPendingWork - unblocked roadmap work remains? (null disables nudging)
+ * @param {(() => Promise<string>)|null} opts.getProgressSignature - roadmap/commit fingerprint; a change resets the futile-nudge counter
  * @param {number|null} opts.windowEndTimeMs - absolute deadline (scheduled windows); null = unbounded
  * @param {boolean} opts.autoResume
- * @returns {Promise<{timedOut: boolean, autoResumeCount: number, giveUpReason: string|null}>}
+ * @returns {Promise<{timedOut: boolean, autoResumeCount: number, nudgeCount: number, giveUpReason: string|null}>}
  */
 async function runSessionWithAutoResume({
   spawnSession,
   saveSession,
   getTranscriptMtime = null,
   model = null,
+  hasPendingWork = null,
+  getProgressSignature = null,
   windowEndTimeMs = null,
   autoResume = true,
   deps = {}
@@ -335,17 +355,22 @@ async function runSessionWithAutoResume({
     terminate = terminateWithGrace,
     watch = watchForStall,
     wait = waitForLimitReset,
-    maxResumes = MAX_AUTO_RESUMES
+    maxResumes = MAX_AUTO_RESUMES,
+    maxFutileNudges = MAX_FUTILE_NUDGES
   } = deps;
 
   let timedOut = false;
   let autoResumeCount = 0;
+  let nudgeCount = 0;
+  let futileNudges = 0;
+  let lastProgress = getProgressSignature ? await getProgressSignature() : null;
   let giveUpReason = null;
   let isResume = false;
+  let spawnReason = 'start';
 
   while (true) {
     const deadlineMs = windowEndTimeMs ? Math.max(windowEndTimeMs - now(), 1) : null;
-    const { promise, proc } = spawnSession({ isResume });
+    const { promise, proc } = spawnSession({ isResume, reason: spawnReason });
 
     const timer = deadlineMs ? setTimeout(() => {
       timedOut = true;
@@ -356,6 +381,7 @@ async function runSessionWithAutoResume({
     }, deadlineMs) : null;
 
     let limitDetected = false;
+    let nudgeRequested = false;
     const watcher = (autoResume && getTranscriptMtime) ? watch({
       getMtime: getTranscriptMtime,
       deps,
@@ -364,6 +390,25 @@ async function runSessionWithAutoResume({
         log('');
         log('  === Usage limit detected — stopping Morgan to wait for the reset ===');
         terminate(proc);
+      },
+      // Morgan ended his turn but the process waits for input forever.
+      // Continue him while unblocked roadmap work remains.
+      onIdleAvailable: async () => {
+        if (!hasPendingWork) return false;
+        if (windowEndTimeMs && now() >= windowEndTimeMs) return false;
+        if (futileNudges >= maxFutileNudges) return false;
+        let pending = false;
+        try {
+          pending = await hasPendingWork();
+        } catch {
+          return false; // can't tell → leave the run alone
+        }
+        if (!pending) return false;
+        nudgeRequested = true;
+        log('');
+        log('  === Morgan went idle with work remaining — continuing the run ===');
+        terminate(proc);
+        return true;
       }
     }) : null;
 
@@ -373,6 +418,34 @@ async function runSessionWithAutoResume({
     await saveSession();
 
     if (!autoResume || timedOut) break;
+
+    if (nudgeRequested) {
+      // Track whether continuations are actually producing work; a wedged
+      // Morgan must not be respawned forever.
+      if (getProgressSignature) {
+        const sig = await getProgressSignature();
+        if (sig === lastProgress) {
+          futileNudges++;
+        } else {
+          futileNudges = 0;
+          lastProgress = sig;
+        }
+      }
+      if (futileNudges >= maxFutileNudges) {
+        giveUpReason = 'futile_nudges';
+        log('');
+        log(`  === ${futileNudges} continuations produced no progress — concluding the run ===`);
+        log('');
+        break;
+      }
+      nudgeCount++;
+      isResume = true;
+      spawnReason = 'nudge';
+      log('');
+      log(`  === Continuing Morgan (continuation ${nudgeCount}) ===`);
+      log('');
+      continue;
+    }
 
     if (!limitDetected) {
       // Early exit with budget left: probe once. Only a confirmed limit
@@ -390,18 +463,20 @@ async function runSessionWithAutoResume({
 
     autoResumeCount++;
     isResume = true;
+    spawnReason = 'limit_resume';
     log('');
     log(`  === Usage limit lifted — resuming Morgan (auto-resume ${autoResumeCount}/${maxResumes}) ===`);
     log('');
   }
 
-  return { timedOut, autoResumeCount, giveUpReason };
+  return { timedOut, autoResumeCount, nudgeCount, giveUpReason };
 }
 
 module.exports = {
   STALL_THRESHOLD_MS,
   PROBE_INTERVAL_MS,
   REPROBE_INTERVAL_MS,
+  MAX_FUTILE_NUDGES,
   MAX_WAIT_MS,
   MAX_AUTO_RESUMES,
   MIN_REMAINING_MS,
