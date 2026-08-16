@@ -172,14 +172,14 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     : '';
   const initialPrompt = isAutonomous
     ? `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and start working through the pending items autonomously. Do not wait for input.`
-    : `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and start working through the pending items. I can interact with you as you work.`;
+    : `${repairFirst}${repairFirst ? 'read' : 'Read'} the roadmap and work through the pending items continuously. I may interject as you work, but do not pause or wait for my input — keep going until everything is complete, parked, or blocked.`;
 
   console.log('  Spawning Morgan as orchestrator...');
   console.log('  Use Ctrl+C or /exit to end the session.');
   console.log('');
 
   const effectiveSessionId = claudeSessionId || resumeSessionId;
-  const continuationPrompt = `Continue working through the roadmap from where you left off. Check roadmap.md for pending items.${healthStatus ? `\n\n${healthStatus}` : ''}`;
+  const continuationPrompt = `Continue working through the roadmap from where you left off. Check roadmap.md for pending items. Do not pause at checkpoints or wait for input — keep going until everything is complete, parked, or blocked.${healthStatus ? `\n\n${healthStatus}` : ''}`;
 
   // Spawn Morgan inside the limit-aware session loop: enforces the window-end
   // deadline (scheduled windows only — plain runs are unbounded), detects a
