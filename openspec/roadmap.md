@@ -226,6 +226,7 @@
 
 ### Group B: Unattended Reliability
 <!-- depends: Phase XVIII Group A -->
+- [ ] `run-until-done` — Continue an idle Morgan automatically: when the transcript stalls and the probe says the account is available (e.g. after Claude Code's "usage limit approaching — checkpoint now" injection makes Morgan summarize and wait for input), terminate and respawn with `--resume` plus a keep-going prompt, while unblocked roadmap work remains; bounded by a futile-continuation cap (3 with no roadmap/commit progress) and the `--no-auto-resume` opt-out
 - [ ] `limit-detection-hardening` — Fix field failure where a limit-frozen session was never detected: probe reads stdout+stderr with a broadened limit pattern, probes with Morgan's configured model (catches model-specific caps), the stall watcher re-probes on a 15-min interval instead of disarming after one non-limited verdict, and transcript tracking follows the newest `.jsonl` in the project dir so detection survives `--resume`
 
 ## Phase XIX: Unbounded Runs

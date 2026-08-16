@@ -180,24 +180,33 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
 
   const effectiveSessionId = claudeSessionId || resumeSessionId;
   const continuationPrompt = `Continue working through the roadmap from where you left off. Check roadmap.md for pending items. Do not pause at checkpoints or wait for input — keep going until everything is complete, parked, or blocked.${healthStatus ? `\n\n${healthStatus}` : ''}`;
+  // Sent after Morgan ended a turn with work left (typically Claude Code's
+  // "usage limit approaching — checkpoint now" injection). Names the stall so
+  // he resumes work instead of re-summarizing it.
+  const nudgePrompt = `You stopped with pending roadmap work remaining, and the run is still going. A checkpoint or status summary is not a stopping point. Pick up the most impactful remaining item from roadmap.md and implement it now — do not summarize, do not wait for input. Keep going until everything is complete, parked, or blocked by an incomplete [HUMAN] prerequisite.`;
 
   // Spawn Morgan inside the limit-aware session loop: enforces the window-end
   // deadline (scheduled windows only — plain runs are unbounded), detects a
   // usage-limit stop (frozen session or early exit), waits out the limit
-  // window, and auto-resumes — unless --no-auto-resume was passed.
-  const { timedOut, autoResumeCount } = await runSessionWithAutoResume({
-    spawnSession: ({ isResume }) => spawnClaudeTerminal({
+  // window, and continues Morgan when he goes idle with work left —
+  // unless --no-auto-resume was passed.
+  const { timedOut, autoResumeCount, nudgeCount } = await runSessionWithAutoResume({
+    spawnSession: ({ isResume, reason }) => spawnClaudeTerminal({
       projectDir: config.projectDir,
       appendSystemPrompt: (resumeSessionId || isResume) ? undefined : renderedPrompt,
       model: morganConfig.model,
       sessionId: claudeSessionId,
       resume: (resumeSessionId || isResume) ? effectiveSessionId : undefined,
       name: `Morgan — ${config.projectId}`,
-      initialPrompt: (resumeSessionId || isResume) ? continuationPrompt : initialPrompt
+      initialPrompt: reason === 'nudge'
+        ? nudgePrompt
+        : (resumeSessionId || isResume) ? continuationPrompt : initialPrompt
     }),
     saveSession: () => saveCliSession(stateDir, effectiveSessionId, 'run'),
     getTranscriptMtime: latestTranscriptMtime(config.projectDir),
     model: morganConfig.model || null,
+    hasPendingWork: () => hasUnblockedPendingWork(roadmapReader),
+    getProgressSignature: () => progressSignature(config.projectDir, roadmapReader),
     windowEndTimeMs: config.windowEndTimeMs || null,
     autoResume: config.autoResume !== false
   });
@@ -240,6 +249,9 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
   }
   if (autoResumeCount > 0) {
     console.log(`  Auto-resumes: ${autoResumeCount} (after usage-limit waits)`);
+  }
+  if (nudgeCount > 0) {
+    console.log(`  Continues:   ${nudgeCount} (idle with work remaining)`);
   }
   console.log('========================');
   console.log('');
@@ -534,6 +546,50 @@ async function runPreflightHealthCheck(projectDir, fullConfig) {
 }
 
 /**
+ * Is there roadmap work Morgan could actually pick up right now?
+ *
+ * True when an actionable phase (dependencies satisfied) holds a pending
+ * item that isn't `[HUMAN]`-tagged. This is what makes "run until done"
+ * terminate: once everything left is complete, parked, or human-blocked,
+ * an idle Morgan is no longer continued.
+ *
+ * Failure to read/parse the roadmap returns false — never nudge on a guess.
+ */
+async function hasUnblockedPendingWork(roadmapReader) {
+  try {
+    const roadmap = await roadmapReader.parse();
+    const actionable = new Set(roadmapReader.getActionablePhaseNumbers(roadmap));
+    return roadmapReader.getAllItems(roadmap).some(i =>
+      i.status === 'pending' && !i.isHuman && actionable.has(i.phaseNumber)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fingerprint of run progress: completed-item count plus current HEAD.
+ * A change between continuations means Morgan is still getting work done;
+ * an unchanged signature counts toward the futile-continuation cap.
+ */
+async function progressSignature(projectDir, roadmapReader) {
+  let completed = -1;
+  try {
+    const roadmap = await roadmapReader.parse();
+    completed = roadmapReader.getAllItems(roadmap).filter(i => i.status === 'complete').length;
+  } catch { /* unreadable roadmap — HEAD alone still signals progress */ }
+
+  let head = '';
+  try {
+    const { execFile: execFileAsync } = require('../infra/exec-utils');
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: projectDir });
+    head = stdout.trim();
+  } catch { /* not a git repo or no commits */ }
+
+  return `${completed}:${head}`;
+}
+
+/**
  * Detect whether Morgan's session changed the project: new commits since
  * the pre-session HEAD, or uncommitted working-tree changes.
  */
@@ -612,6 +668,8 @@ async function verifyPostSessionHealth({ projectDir, fullConfig, model, resumeSe
 
 module.exports = {
   runCommand,
+  hasUnblockedPendingWork,
+  progressSignature,
   auditRoadmapCompletions,
   runHealthCheckReport,
   runPreflightHealthCheck,
