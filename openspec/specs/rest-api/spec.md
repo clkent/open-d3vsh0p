@@ -31,8 +31,8 @@ The system SHOULD expose RESTful endpoints for creating, reading, updating, and 
 The system SHOULD expose endpoints for starting, stopping, resuming, and querying orchestrator sessions.
 
 #### Scenario: Start a new session
-- **WHEN** a POST request is made to `/api/projects/:id/sessions` with optional budget and time limits
-- **THEN** the system SHOULD start an orchestrator session for that project and return the session ID
+- **WHEN** a POST request is made to `/api/projects/:id/sessions`
+- **THEN** the system SHOULD start an orchestrator session for that project and return the session ID, with no budget or time-limit parameters
 
 #### Scenario: Get session status
 - **WHEN** a GET request is made to `/api/projects/:id/sessions/:sessionId`

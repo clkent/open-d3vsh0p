@@ -33,19 +33,15 @@ The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk
 - **THEN** the system SHALL print usage showing all commands, options, and examples, then exit with code 0
 
 ### Option Parsing
-The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30"), `--time-limit` (string, default "7"), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--no-auto-resume` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Budget SHALL be parsed as USD float. Time limit SHALL be parsed as hours and converted to milliseconds (multiplied by 3,600,000). Requirements SHALL be split by comma into an array of trimmed strings. The config SHALL expose `autoResume: true` unless `--no-auto-resume` is provided.
+The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30", consumed only by the `security` command as an enforced scan budget), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--no-auto-resume` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Requirements SHALL be split by comma into an array of trimmed strings. The config SHALL expose `autoResume: true` unless `--no-auto-resume` is provided. The system SHALL NOT accept a `--time-limit` option and SHALL NOT derive a session time limit for the `run` command.
 
-#### Scenario: Default budget and time limit
-- **WHEN** no --budget or --time-limit options are provided
-- **THEN** config.budgetLimitUsd SHALL be 30.0 and config.timeLimitMs SHALL be 25,200,000 (7 * 3,600,000)
+#### Scenario: No time limit option
+- **WHEN** CLI options are parsed
+- **THEN** no `--time-limit` option SHALL exist and the run config SHALL contain no `timeLimitMs`
 
-#### Scenario: Custom budget
-- **WHEN** `--budget 10` is provided
-- **THEN** config.budgetLimitUsd SHALL be 10.0
-
-#### Scenario: Custom time limit in hours
-- **WHEN** `--time-limit 4` is provided
-- **THEN** config.timeLimitMs SHALL be 14,400,000 (4 * 3,600,000)
+#### Scenario: Budget applies to security only
+- **WHEN** `--budget 5` is provided with the `security` command
+- **THEN** the security scan SHALL use $5.00 as its enforced budget cap; the `run` command SHALL ignore `--budget`
 
 #### Scenario: Requirements comma-separated
 - **WHEN** `--requirements "user-auth, payment-flow"` is provided
@@ -72,11 +68,13 @@ The system SHALL spawn Morgan (Principal Engineer) as a persistent Claude Code C
 
 If no roadmap exists, the system SHALL exit with an error directing the user to run `devshop kickoff` first.
 
-The command SHALL print a session header (project name, directory, budget, time limit) before spawning Morgan.
+The command SHALL print a session header (project name, directory) before spawning Morgan. The header SHALL NOT include budget or time-limit lines.
+
+The run SHALL have no session time limit: it continues until Morgan exits (and the limit-aware resume loop declines to respawn), the operator stops it, or — for windowed runs only — the window end time is reached.
 
 After Morgan exits, the command SHALL consolidate the session branch to main via PR if any items were completed (detected by comparing roadmap state before and after the session).
 
-The exit code SHALL be 0 if Morgan exited normally, 1 if the session was terminated by timeout.
+The exit code SHALL be 0 on normal completion and 1 when parked items remain.
 
 #### Scenario: Run spawns Morgan CLI
 - **WHEN** `run` is executed and `roadmap.md` exists in the project directory
@@ -88,15 +86,15 @@ The exit code SHALL be 0 if Morgan exited normally, 1 if the session was termina
 
 #### Scenario: Session header output
 - **WHEN** `run` is executed
-- **THEN** the system SHALL print a header block with Project (name and id), Directory, Budget, and Time limit before spawning Morgan
+- **THEN** the system SHALL print a header block with Project (name and id) and Directory before spawning Morgan, with no Budget or Time limit lines
 
 #### Scenario: Resume flag passes to Morgan
 - **WHEN** `run` is executed with `--resume` and a saved session ID exists
 - **THEN** the system SHALL pass `--resume {sessionId}` to the `claude` CLI instead of `--append-system-prompt`
 
-#### Scenario: Time limit enforcement
-- **WHEN** the configured `timeLimitMs` elapses during Morgan's session
-- **THEN** the system SHALL terminate the `claude` CLI process
+#### Scenario: No time-based termination on plain runs
+- **WHEN** `run` is executed without `--window` and Morgan's session runs for any duration
+- **THEN** the system SHALL NOT terminate the `claude` CLI process based on elapsed time
 
 #### Scenario: Post-session consolidation
 - **WHEN** Morgan's CLI session exits and the roadmap has newly completed items compared to pre-session state
@@ -157,7 +155,7 @@ The system SHALL resolve projects by looking up the `projectId` positional argum
 - **THEN** the system SHALL print `Error: project-id is required`, display usage, and exit with code 1
 
 ### Config Assembly
-The system SHALL assemble a config object from the resolved project and parsed CLI options, containing: `projectId`, `projectDir`, `githubRepo`, `budgetLimitUsd`, `timeLimitMs`, `resume`, `dryRun`, `requirements`, `templatesDir` (pointing to `templates/agents/`), and `activeAgentsDir` (pointing to `active-agents/{projectId}/`).
+The system SHALL assemble a config object from the resolved project and parsed CLI options, containing: `projectId`, `projectDir`, `githubRepo`, `resume`, `dryRun`, `requirements`, `templatesDir` (pointing to `templates/agents/`), and `activeAgentsDir` (pointing to `active-agents/{projectId}/`). The config SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
 
 #### Scenario: Templates directory resolution
 - **WHEN** the config is assembled
@@ -166,6 +164,10 @@ The system SHALL assemble a config object from the resolved project and parsed C
 #### Scenario: Active agents directory resolution
 - **WHEN** the config is assembled for project "my-app"
 - **THEN** `activeAgentsDir` SHALL resolve to `{devshopRoot}/active-agents/my-app`
+
+#### Scenario: No budget or time fields
+- **WHEN** the config is assembled for the `run` command
+- **THEN** it SHALL NOT include `budgetLimitUsd` or `timeLimitMs`
 
 ### Fatal Error Handling
 The system SHALL catch unhandled errors from the main function, print `Fatal error: {message}` to stderr, and exit with code 2. When the `DEBUG` environment variable is set, it SHALL also print the full stack trace.
