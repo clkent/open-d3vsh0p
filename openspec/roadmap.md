@@ -235,3 +235,17 @@
 ### Group A: Remove Session Limits
 - [x] `remove-run-time-limit` — Strip the session time-limit concept (`--time-limit`, 7h default, SIGTERM timer, active-time accounting) and the unenforced run budget (`--budget` for run, header/prompt/defaults) so `./devshop run` continues until the project is done or the operator stops it; windowed runs keep their end-of-window boundary via `windowEndTimeMs`; usage-limit auto-resume caps and the security scan budget are unchanged
 - [x] `morgan-continue-until-blocked` — Prompt hardening so Morgan doesn't stall mid-run: continue-by-default stop rules (stop only when every remaining item is complete, parked, or blocked by a `[HUMAN]` prerequisite / parked dependency), Group Z checkpoints and phase boundaries are explicitly not stopping points, no end-of-turn status summaries while unblocked work remains, and the interactive initial/continuation prompts tell Morgan not to pause for input
+
+## Phase XX: Remote Operation
+<!-- depends: Phase XIX -->
+
+### Group A: Phone Access
+- [ ] `remote-control-sessions` — Start `kickoff`/`talk`/`pair`/`run` sessions with Claude Code Remote Control (`remoteControl.enabled` config or `--remote-control` flag) so the same local session is reachable from the Claude mobile app with full transcript sync and push notifications for questions
+
+### Group B: Session Events
+<!-- depends: Phase XX Group A -->
+- [ ] `session-event-hooks` — Inject Claude Code hooks (`Stop`, `Notification`, `SessionEnd`, `PreToolUse` on `AskUserQuestion`) via `--settings` at spawn, merged with project hooks, plus run-lifecycle events (limit wait, idle continue, run complete, health failed, consolidation, HUMAN items) posted to a localhost event sink; silent no-op when nothing listens
+
+### Group C: Slack Bridge
+<!-- depends: Phase XX Group B -->
+- [ ] `slack-control` — `devshop slack` Socket Mode bridge daemon (zero-dependency, launchd-installable): allowlisted commands (`run`, `talk`, `pair`, `kickoff`, `status`, `stop`, `sessions`) from a phone, tmux-hosted sessions so Slack thread replies reach the terminal via `send-keys`, one thread per session mirroring agent messages, questions, permission prompts, idle stops, and run summaries

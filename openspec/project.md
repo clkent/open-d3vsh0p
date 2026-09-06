@@ -59,3 +59,10 @@ _Only pending (unimplemented) requirements are listed here. See `openspec/specs/
 - Estimates in tokens, not dollars — clearer and model-price independent
 - Data source: Claude Code session usage/transcripts (orchestrator-written summaries no longer exist)
 - Re-enables: pre-run estimate in `run`, remaining-work estimate in `status`, and the disabled monthly cadence review
+
+### Remote Operation
+
+- Remote Control on every interactive session (`remoteControl.enabled` / `--remote-control`) for phone chat via the Claude app
+- Claude Code hooks injected at spawn via `--settings` (merged with project hooks) and run-lifecycle events posted to a localhost event sink
+- `devshop slack` bridge: Socket Mode with stdlib `WebSocket`/`fetch`, allowlisted commands, tmux-hosted sessions, thread-per-session with `send-keys` reply delivery, launchd install
+- Machine-level `config.local.json` overlay and Slack tokens from root `.env`
