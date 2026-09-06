@@ -235,3 +235,13 @@
 ### Group A: Remove Session Limits
 - [x] `remove-run-time-limit` — Strip the session time-limit concept (`--time-limit`, 7h default, SIGTERM timer, active-time accounting) and the unenforced run budget (`--budget` for run, header/prompt/defaults) so `./devshop run` continues until the project is done or the operator stops it; windowed runs keep their end-of-window boundary via `windowEndTimeMs`; usage-limit auto-resume caps and the security scan budget are unchanged
 - [x] `morgan-continue-until-blocked` — Prompt hardening so Morgan doesn't stall mid-run: continue-by-default stop rules (stop only when every remaining item is complete, parked, or blocked by a `[HUMAN]` prerequisite / parked dependency), Group Z checkpoints and phase boundaries are explicitly not stopping points, no end-of-turn status summaries while unblocked work remains, and the interactive initial/continuation prompts tell Morgan not to pause for input
+
+## Phase XX: Remote Operation
+<!-- depends: Phase XIX -->
+
+### Group A: Phone Access
+- [ ] `remote-control-sessions` — Start `kickoff`/`talk`/`pair`/`run` sessions with Claude Code Remote Control (`remoteControl.enabled` config or `--remote-control` flag, named per agent and project, kept across run-loop respawns) so the same local session is reachable from the Claude mobile app with full transcript sync, forwarded questions, and push notifications
+
+### Group B: Control Server
+<!-- depends: Phase XX Group A -->
+- [ ] `remote-control-server` — `devshop remote` command family: a persistent `claude remote-control` control session in `active-agents/remote/` with a generated CLAUDE.md and narrow permissions, `launch` that starts orchestrator commands detached in named tmux sessions with `--remote-control`, `sessions` and graceful `stop`, and launchd `install`/`remove`/`status` (server runs inside tmux, restart loop with `--continue`)

@@ -59,3 +59,9 @@ _Only pending (unimplemented) requirements are listed here. See `openspec/specs/
 - Estimates in tokens, not dollars — clearer and model-price independent
 - Data source: Claude Code session usage/transcripts (orchestrator-written summaries no longer exist)
 - Re-enables: pre-run estimate in `run`, remaining-work estimate in `status`, and the disabled monthly cadence review
+
+### Remote Operation
+
+- Remote Control on every interactive session (`remoteControl.enabled` / `--remote-control`) so Riley and Morgan sessions appear in the Claude app, named per agent and project
+- `devshop remote` control server: persistent `claude remote-control` session in a dedicated control directory that launches orchestrator commands into detached tmux sessions, lists and stops them, and installs under launchd
+- Machine-level `config.local.json` overlay merged between defaults and per-project overrides
