@@ -10,9 +10,7 @@ IMPLEMENTED
 - `platform/orchestrator/src/commands/limit-resume.js` — probe, stall watcher, wait loop, session loop
 - `platform/orchestrator/src/commands/run.js` — integration into the run lifecycle, pending-work and progress callbacks
 - `platform/orchestrator/src/commands/cli-spawn.js` — session-ID validation on load
-
 ## Requirements
-
 ### Requirement: Availability Probe
 The system SHALL provide an availability probe that runs a minimal headless `claude -p` call with piped stdio and a bounded timeout (~60 seconds), and classifies the result as one of: `available` (exit code 0), `limited` (non-zero exit with combined stdout+stderr matching a case-insensitive usage-limit pattern covering at least `hit your … limit`, `reached your … limit`, `usage limit`, `limit reached`, and `resets`), or `unknown` (any other failure, including timeout and network errors).
 
@@ -81,18 +79,20 @@ When Morgan's session goes idle without exiting — the transcript has stalled p
 
 To continue, the system SHALL terminate Morgan's process (SIGTERM, escalating to SIGKILL after the grace period) and respawn it with `--resume <sessionId>` and a continuation prompt that states the run is not finished and that a checkpoint is not a stopping point.
 
-A continuation SHALL be issued only when all of the following hold: auto-resume is enabled, the roadmap has at least one pending item that is not blocked by an incomplete `[HUMAN]` prerequisite, the probe verdict is `available` (never `unknown`), and — for windowed runs — the window end has not passed.
+Unblocked roadmap work SHALL be defined as the set of pending item IDs that are not tagged `[HUMAN]` and belong to an actionable phase (every dependency resolves to a phase whose items are all complete or parked). The session loop SHALL obtain this set through a single `getUnblockedPendingIds` callback.
 
-Continuations SHALL be bounded by a futile-nudge cap (default 3): if that many consecutive continuations produce no change in the run's progress signature (roadmap completed-item count and git HEAD), the system SHALL conclude the run. Any observed progress SHALL reset the counter.
+A continuation SHALL be issued only when all of the following hold: auto-resume is enabled, the unblocked set is non-empty, the probe verdict is `available` (never `unknown`), and — for windowed runs — the window end has not passed.
+
+Continuations SHALL be bounded by a futile-continuation cap (default 3). The system SHALL record the unblocked set at run start and at each continuation. When Morgan next goes idle, the continuation just ended SHALL count as progress only if at least one ID from the previously recorded set is absent from the current set (the item was completed, parked, or otherwise resolved). Commits, completions outside the recorded set, and newly unblocked items SHALL NOT count as progress. Progress SHALL reset the counter; that many consecutive continuations without progress SHALL conclude the run.
 
 The number of continuations SHALL be reported in the session summary.
 
 #### Scenario: Idle session with pending work is continued
-- **WHEN** the transcript stalls past the threshold, the probe returns `available`, and unblocked pending roadmap items remain
+- **WHEN** the transcript stalls past the threshold, the probe returns `available`, and the unblocked set is non-empty
 - **THEN** the system SHALL terminate Morgan and respawn with `--resume` and a continuation prompt
 
 #### Scenario: Idle session with no remaining work concludes
-- **WHEN** the transcript stalls, the probe returns `available`, and every remaining item is complete, parked, or `[HUMAN]`-blocked
+- **WHEN** the transcript stalls, the probe returns `available`, and the unblocked set is empty
 - **THEN** the system SHALL NOT continue and SHALL conclude the run normally
 
 #### Scenario: Unknown verdict never triggers a continuation
@@ -100,11 +100,15 @@ The number of continuations SHALL be reported in the session summary.
 - **THEN** the system SHALL keep re-probing and SHALL NOT continue the session
 
 #### Scenario: Futile continuations are capped
-- **WHEN** the configured number of consecutive continuations produce no change in the progress signature
+- **WHEN** the configured number of consecutive continuations each end with every previously recorded target still pending
 - **THEN** the system SHALL conclude the run instead of continuing again
 
-#### Scenario: Progress resets the futile counter
-- **WHEN** a continuation is followed by a change in the progress signature
+#### Scenario: Side work does not count as progress
+- **WHEN** a continuation ends with new commits and a newly unblocked item, but every previously recorded target is still pending
+- **THEN** the futile-continuation counter SHALL increment
+
+#### Scenario: Resolving a target resets the futile counter
+- **WHEN** a continuation ends with one of the previously recorded targets complete or parked
 - **THEN** the futile-continuation counter SHALL reset, allowing further continuations later in the run
 
 #### Scenario: Opt-out disables continuation
@@ -153,3 +157,4 @@ Auto-resume SHALL be enabled by default. When the run is started with `--no-auto
 #### Scenario: Opt-out disables detection
 - **WHEN** `run` is executed with `--no-auto-resume` and Morgan exits early or stalls
 - **THEN** the system SHALL NOT probe availability, SHALL NOT enter the wait loop, and SHALL NOT continue an idle session
+
