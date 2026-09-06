@@ -205,8 +205,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
     saveSession: () => saveCliSession(stateDir, effectiveSessionId, 'run'),
     getTranscriptMtime: latestTranscriptMtime(config.projectDir),
     model: morganConfig.model || null,
-    hasPendingWork: () => hasUnblockedPendingWork(roadmapReader),
-    getProgressSignature: () => progressSignature(config.projectDir, roadmapReader),
+    getUnblockedPendingIds: () => unblockedPendingIds(roadmapReader),
     windowEndTimeMs: config.windowEndTimeMs || null,
     autoResume: config.autoResume !== false
   });
@@ -546,47 +545,18 @@ async function runPreflightHealthCheck(projectDir, fullConfig) {
 }
 
 /**
- * Is there roadmap work Morgan could actually pick up right now?
- *
- * True when an actionable phase (dependencies satisfied) holds a pending
- * item that isn't `[HUMAN]`-tagged. This is what makes "run until done"
- * terminate: once everything left is complete, parked, or human-blocked,
- * an idle Morgan is no longer continued.
- *
- * Failure to read/parse the roadmap returns false — never nudge on a guess.
+ * IDs of pending roadmap items Morgan could actually work on: not tagged
+ * [HUMAN], and in a phase whose dependencies are all complete or parked.
+ * Sorted so callers can compare snapshots. Throws when the roadmap can't be
+ * read — the session loop treats that as "can't tell" and leaves the run alone.
  */
-async function hasUnblockedPendingWork(roadmapReader) {
-  try {
-    const roadmap = await roadmapReader.parse();
-    const actionable = new Set(roadmapReader.getActionablePhaseNumbers(roadmap));
-    return roadmapReader.getAllItems(roadmap).some(i =>
-      i.status === 'pending' && !i.isHuman && actionable.has(i.phaseNumber)
-    );
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Fingerprint of run progress: completed-item count plus current HEAD.
- * A change between continuations means Morgan is still getting work done;
- * an unchanged signature counts toward the futile-continuation cap.
- */
-async function progressSignature(projectDir, roadmapReader) {
-  let completed = -1;
-  try {
-    const roadmap = await roadmapReader.parse();
-    completed = roadmapReader.getAllItems(roadmap).filter(i => i.status === 'complete').length;
-  } catch { /* unreadable roadmap — HEAD alone still signals progress */ }
-
-  let head = '';
-  try {
-    const { execFile: execFileAsync } = require('../infra/exec-utils');
-    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: projectDir });
-    head = stdout.trim();
-  } catch { /* not a git repo or no commits */ }
-
-  return `${completed}:${head}`;
+async function unblockedPendingIds(roadmapReader) {
+  const roadmap = await roadmapReader.parse();
+  const actionable = new Set(roadmapReader.getActionablePhaseNumbers(roadmap));
+  return roadmapReader.getAllItems(roadmap)
+    .filter(i => i.status === 'pending' && !i.isHuman && actionable.has(i.phaseNumber))
+    .map(i => i.id)
+    .sort();
 }
 
 /**
@@ -668,8 +638,7 @@ async function verifyPostSessionHealth({ projectDir, fullConfig, model, resumeSe
 
 module.exports = {
   runCommand,
-  hasUnblockedPendingWork,
-  progressSignature,
+  unblockedPendingIds,
   auditRoadmapCompletions,
   runHealthCheckReport,
   runPreflightHealthCheck,

@@ -624,8 +624,7 @@ describe('runSessionWithAutoResume', () => {
       },
       saveSession: async () => {},
       getTranscriptMtime: async () => 1,
-      hasPendingWork: async () => true,
-      getProgressSignature: async () => `sig-${spawns}`, // progress each round
+      getUnblockedPendingIds: async () => ['item-a'],
       autoResume: true,
       deps: {
         watch: idleOnSession([1]),
@@ -646,7 +645,7 @@ describe('runSessionWithAutoResume', () => {
       spawnSession: () => { spawns++; return makeSession(); },
       saveSession: async () => {},
       getTranscriptMtime: async () => 1,
-      hasPendingWork: async () => false,
+      getUnblockedPendingIds: async () => [],
       autoResume: true,
       deps: {
         watch: idleOnSession([1]),
@@ -669,8 +668,7 @@ describe('runSessionWithAutoResume', () => {
       },
       saveSession: async () => {},
       getTranscriptMtime: async () => 1,
-      hasPendingWork: async () => true,
-      getProgressSignature: async () => 'frozen', // never changes
+      getUnblockedPendingIds: async () => ['stuck'], // never resolved
       autoResume: true,
       deps: {
         watch: idleOnSession([1, 2, 3, 4, 5]),
@@ -688,8 +686,8 @@ describe('runSessionWithAutoResume', () => {
 
   it('progress resets the futile-continuation counter', async () => {
     let spawns = 0;
-    // no progress, no progress, then progress, then no progress ×3 → cap
-    const sigs = ['a', 'a', 'a', 'b', 'b', 'b', 'b'];
+    // no progress, no progress, then 'a' resolved, then no progress ×3 → cap
+    const sets = [['a'], ['a'], ['a'], ['b'], ['b'], ['b'], ['b']];
     const result = await runSessionWithAutoResume({
       spawnSession: () => {
         spawns++;
@@ -697,8 +695,7 @@ describe('runSessionWithAutoResume', () => {
       },
       saveSession: async () => {},
       getTranscriptMtime: async () => 1,
-      hasPendingWork: async () => true,
-      getProgressSignature: async () => sigs.shift() ?? 'z',
+      getUnblockedPendingIds: async () => sets.shift() ?? ['z'],
       autoResume: true,
       deps: {
         watch: idleOnSession([1, 2, 3, 4, 5, 6, 7]),
@@ -714,6 +711,81 @@ describe('runSessionWithAutoResume', () => {
     assert.equal(result.giveUpReason, 'futile_nudges');
   });
 
+  it('side work does not count as progress — targets must be resolved', async () => {
+    let spawns = 0;
+    // Morgan commits and a new item unblocks, but 'phantom' (the item that
+    // justified every continuation) never leaves the set.
+    const sets = [['phantom'], ['phantom', 'new-1'], ['phantom', 'new-1', 'new-2'], ['phantom', 'new-1', 'new-2', 'new-3']];
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => {
+        spawns++;
+        return makeSession({ resolveOnTerminate: true });
+      },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      getUnblockedPendingIds: async () => sets.shift() ?? ['phantom', 'new-1', 'new-2', 'new-3'],
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1, 2, 3, 4, 5]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        maxFutileNudges: 3,
+        log: () => {}
+      }
+    });
+    assert.equal(result.giveUpReason, 'futile_nudges');
+    assert.equal(result.nudgeCount, 2, 'newly unblocked items did not extend the run');
+    assert.equal(spawns, 3);
+  });
+
+  it('parking a target counts as progress', async () => {
+    let spawns = 0;
+    // 'a' is parked during the first continuation (drops out of the set),
+    // then nothing resolves → cap after 3 futile continuations.
+    const sets = [['a', 'b'], ['a', 'b'], ['b'], ['b'], ['b'], ['b']];
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => {
+        spawns++;
+        return makeSession({ resolveOnTerminate: true });
+      },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      getUnblockedPendingIds: async () => sets.shift() ?? ['b'],
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1, 2, 3, 4, 5, 6]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        maxFutileNudges: 3,
+        log: () => {}
+      }
+    });
+    assert.equal(result.giveUpReason, 'futile_nudges');
+    assert.equal(result.nudgeCount, 4, 'the resolved target reset the counter once');
+  });
+
+  it('an unreadable roadmap never triggers a continuation', async () => {
+    let spawns = 0;
+    const result = await runSessionWithAutoResume({
+      spawnSession: () => { spawns++; return makeSession(); },
+      saveSession: async () => {},
+      getTranscriptMtime: async () => 1,
+      getUnblockedPendingIds: async () => { throw new Error('ENOENT'); },
+      autoResume: true,
+      deps: {
+        watch: idleOnSession([1]),
+        terminate: (proc) => proc.exit(),
+        probe: async () => 'available',
+        wait: async () => ({ verdict: 'resume', reason: 'x' }),
+        log: () => {}
+      }
+    });
+    assert.equal(spawns, 1);
+    assert.equal(result.nudgeCount, 0);
+  });
+
   it('--no-auto-resume disables idle continuation', async () => {
     let spawns = 0;
     let watchCalls = 0;
@@ -721,7 +793,7 @@ describe('runSessionWithAutoResume', () => {
       spawnSession: () => { spawns++; return makeSession(); },
       saveSession: async () => {},
       getTranscriptMtime: async () => 1,
-      hasPendingWork: async () => true,
+      getUnblockedPendingIds: async () => ['item-a'],
       autoResume: false,
       deps: {
         watch: () => { watchCalls++; return noopWatch(); },
