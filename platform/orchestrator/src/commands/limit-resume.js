@@ -328,19 +328,27 @@ async function waitForLimitReset({ resumeCount = 0, windowEndTimeMs = null, deps
  * @param {function} opts.saveSession - async, called after every exit
  * @param {(() => Promise<number|null>)|null} opts.getTranscriptMtime - newest transcript mtime source (null disables stall detection)
  * @param {string|null} opts.model - Morgan's configured model; the probe mirrors it
- * @param {(() => Promise<boolean>)|null} opts.hasPendingWork - unblocked roadmap work remains? (null disables nudging)
- * @param {(() => Promise<string>)|null} opts.getProgressSignature - roadmap/commit fingerprint; a change resets the futile-nudge counter
+ * @param {(() => Promise<string[]>)|null} opts.getUnblockedPendingIds - IDs of pending roadmap items not blocked by a [HUMAN] prerequisite (null disables nudging)
  * @param {number|null} opts.windowEndTimeMs - absolute deadline (scheduled windows); null = unbounded
  * @param {boolean} opts.autoResume
  * @returns {Promise<{timedOut: boolean, autoResumeCount: number, nudgeCount: number, giveUpReason: string|null}>}
  */
+/** Read the unblocked pending IDs; null when the roadmap can't be read. */
+async function readPendingIds(getUnblockedPendingIds) {
+  try {
+    const ids = await getUnblockedPendingIds();
+    return Array.isArray(ids) ? ids : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runSessionWithAutoResume({
   spawnSession,
   saveSession,
   getTranscriptMtime = null,
   model = null,
-  hasPendingWork = null,
-  getProgressSignature = null,
+  getUnblockedPendingIds = null,
   windowEndTimeMs = null,
   autoResume = true,
   deps = {}
@@ -363,7 +371,10 @@ async function runSessionWithAutoResume({
   let autoResumeCount = 0;
   let nudgeCount = 0;
   let futileNudges = 0;
-  let lastProgress = getProgressSignature ? await getProgressSignature() : null;
+  // The unblocked pending IDs that justified the last continuation (or the
+  // set at run start). A continuation only counts as progress if it resolves
+  // one of these — commits on the side don't keep the loop alive.
+  let nudgeTargets = getUnblockedPendingIds ? await readPendingIds(getUnblockedPendingIds) : null;
   let giveUpReason = null;
   let isResume = false;
   let spawnReason = 'start';
@@ -382,6 +393,7 @@ async function runSessionWithAutoResume({
 
     let limitDetected = false;
     let nudgeRequested = false;
+    let pendingAtIdle = null;
     const watcher = (autoResume && getTranscriptMtime) ? watch({
       getMtime: getTranscriptMtime,
       deps,
@@ -394,16 +406,12 @@ async function runSessionWithAutoResume({
       // Morgan ended his turn but the process waits for input forever.
       // Continue him while unblocked roadmap work remains.
       onIdleAvailable: async () => {
-        if (!hasPendingWork) return false;
+        if (!getUnblockedPendingIds) return false;
         if (windowEndTimeMs && now() >= windowEndTimeMs) return false;
         if (futileNudges >= maxFutileNudges) return false;
-        let pending = false;
-        try {
-          pending = await hasPendingWork();
-        } catch {
-          return false; // can't tell → leave the run alone
-        }
-        if (!pending) return false;
+        const pending = await readPendingIds(getUnblockedPendingIds);
+        if (!pending || pending.length === 0) return false; // nothing to do, or can't tell → leave the run alone
+        pendingAtIdle = pending;
         nudgeRequested = true;
         log('');
         log('  === Morgan went idle with work remaining — continuing the run ===');
@@ -421,16 +429,13 @@ async function runSessionWithAutoResume({
 
     if (nudgeRequested) {
       // Track whether continuations are actually producing work; a wedged
-      // Morgan must not be respawned forever.
-      if (getProgressSignature) {
-        const sig = await getProgressSignature();
-        if (sig === lastProgress) {
-          futileNudges++;
-        } else {
-          futileNudges = 0;
-          lastProgress = sig;
-        }
+      // Morgan must not be respawned forever. Progress = one of the items
+      // that justified the previous continuation is no longer pending.
+      if (nudgeTargets) {
+        const resolved = nudgeTargets.some(id => !pendingAtIdle.includes(id));
+        futileNudges = resolved ? 0 : futileNudges + 1;
       }
+      nudgeTargets = pendingAtIdle;
       if (futileNudges >= maxFutileNudges) {
         giveUpReason = 'futile_nudges';
         log('');

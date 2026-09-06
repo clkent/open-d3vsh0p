@@ -65,13 +65,14 @@ class RoadmapReader {
       }
 
       // <!-- depends: Phase I --> or <!-- depends: Phase IV, Phase V -->
+      // Only `Phase <number>` references count as dependencies. Any other
+      // text in the comment (e.g. "; blocked on a vendor account") is
+      // a note for Morgan, not a phase. No references (e.g. "none") means
+      // the phase has no dependencies.
       const dependsMatch = line.match(/<!--\s*depends:\s*(.+?)\s*-->/);
       if (dependsMatch && currentPhase) {
-        const deps = dependsMatch[1]
-          .split(/,\s*/)
-          .map(d => d.replace(/^Phase\s+/, '').trim())
-          .filter(Boolean);
-        currentPhase.depends = deps;
+        currentPhase.depends = [...dependsMatch[1].matchAll(/Phase\s+([IVXLC]+|[0-9]+)\b/g)]
+          .map(m => m[1]);
         continue;
       }
 
@@ -131,7 +132,10 @@ class RoadmapReader {
 
   /**
    * Get phase numbers for all phases whose dependencies are satisfied.
-   * A phase is actionable when all items in its dependency phases are complete or parked.
+   * A phase is actionable when all items in its dependency phases are complete
+   * or parked. A dependency that names no phase in the roadmap blocks the
+   * phase (fail closed): the run's idle-continuation gate relies on this, and
+   * a phantom "actionable" phase would nudge Morgan for work that isn't there.
    */
   getActionablePhaseNumbers(roadmap) {
     const actionable = [];
@@ -142,7 +146,7 @@ class RoadmapReader {
       }
       const allDepsSatisfied = phase.depends.every(depNumber => {
         const depPhase = roadmap.phases.find(p => p.number === depNumber);
-        if (!depPhase) return true;
+        if (!depPhase) return false;
         return depPhase.groups.every(g =>
           g.items.every(i => i.status === 'complete' || i.status === 'parked')
         );

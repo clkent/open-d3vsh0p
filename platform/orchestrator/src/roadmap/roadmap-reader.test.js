@@ -75,6 +75,40 @@ describe('RoadmapReader', () => {
       assert.deepEqual(roadmap.phases[1].depends, ['I']);
     });
 
+    it('extracts phase references and ignores a trailing note', () => {
+      const content = `# Roadmap: Test
+## Phase II: Two
+### Group A: A
+- [ ] \`a\` — pending
+## Phase III: Three
+<!-- depends: Phase II; blocked on a vendor account -->
+### Group A: B
+- [ ] \`b\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      assert.deepEqual(roadmap.phases[1].depends, ['II']);
+      assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['II']);
+    });
+
+    it('extracts multiple references with text between them', () => {
+      const content = `# Roadmap: Test
+## Phase IV: Four
+### Group A: A
+- [x] \`a\` — done
+## Phase V: Five
+<!-- depends: Phase IV -->
+### Group A: B
+- [x] \`b\` — done
+## Phase VI: Six
+<!-- depends: Phase IV and Phase V -->
+### Group A: C
+- [ ] \`c\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      assert.deepEqual(roadmap.phases[2].depends, ['IV', 'V']);
+      assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['IV', 'V', 'VI']);
+    });
+
     it('sets implicit dependencies on phases without explicit depends', () => {
       const roadmap = reader.parseContent(SAMPLE_ROADMAP);
       // Phase I has no depends (first phase)
@@ -190,6 +224,36 @@ describe('RoadmapReader', () => {
 `);
       const actionable = reader.getActionablePhaseNumbers(roadmap);
       assert.deepEqual(actionable, ['I', 'II']);
+    });
+
+    it('blocks a phase whose dependency names no phase in the roadmap (fail closed)', () => {
+      const content = `# Roadmap: Test
+## Phase I: One
+### Group A: A
+- [x] \`a\` — done
+## Phase II: Two
+<!-- depends: Phase IX -->
+### Group A: B
+- [ ] \`b\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      const actionable = reader.getActionablePhaseNumbers(roadmap);
+      assert.deepEqual(actionable, ['I']);
+    });
+
+    it('a depends comment with no phase references means no dependencies', () => {
+      const content = `# Roadmap: Test
+## Phase I: One
+### Group A: A
+- [ ] \`a\` — pending
+## Phase II: Two
+<!-- depends: none -->
+### Group A: B
+- [ ] \`b\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      assert.deepEqual(roadmap.phases[1].depends, []);
+      assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['I', 'II']);
     });
 
     it('returns multiple actionable phases independently', () => {
