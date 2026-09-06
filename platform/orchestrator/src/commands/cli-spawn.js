@@ -6,7 +6,7 @@ const path = require('path');
  * Build CLI args array for the claude command.
  * Pure function — easy to test without spawning a process.
  */
-function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt }) {
+function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, remoteControl, initialPrompt }) {
   const args = ['--dangerously-skip-permissions'];
 
   if (resume) {
@@ -30,6 +30,13 @@ function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continu
     args.push('--name', name);
   }
 
+  // Remote Control: the same session is also reachable from the Claude app.
+  // `--remote-control` takes an optional display name, so a name is always
+  // supplied — otherwise the positional prompt would be consumed as the name.
+  if (remoteControl) {
+    args.push('--remote-control', name || 'd3vsh0p');
+  }
+
   // Positional prompt must come last
   if (initialPrompt) {
     args.push(initialPrompt);
@@ -43,8 +50,8 @@ function buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continu
  * Returns { promise, proc } where promise resolves with the exit code
  * and proc is the child process (for timeout killing).
  */
-function spawnClaudeTerminal({ projectDir, appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt }) {
-  const args = buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, initialPrompt });
+function spawnClaudeTerminal({ projectDir, appendSystemPrompt, model, sessionId, resume, continueSession, name, remoteControl, initialPrompt }) {
+  const args = buildClaudeArgs({ appendSystemPrompt, model, sessionId, resume, continueSession, name, remoteControl, initialPrompt });
 
   const proc = spawn('claude', args, {
     stdio: 'inherit',

@@ -42,6 +42,8 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
 
   const templateEngine = new TemplateEngine(TEMPLATES_DIR);
   const config = await loadConfig({});
+  // --remote-control wins; otherwise the config layers (local > defaults)
+  const remoteControl = options.remoteControl ?? config.remoteControl?.enabled === true;
 
   // Step 1: Scaffold the project first
   const scaffolder = new ProjectScaffolder(logger);
@@ -111,6 +113,7 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
         model: kickoffAgentConfig.model,
         sessionId: claudeSessionId,
         name: `Riley — ${projectId} kickoff`,
+        remoteControl,
         initialPrompt: 'Introduce yourself and ask me what I want to build.'
       }).promise;
       isFirstRun = false;
@@ -121,6 +124,7 @@ async function kickoffCommand(projectName, registry, saveRegistry, options = {})
         continueSession: true,
         model: kickoffAgentConfig.model,
         name: `Riley — ${projectId} kickoff`,
+        remoteControl,
         initialPrompt: 'I re-entered the session because there were validation issues with the specs/roadmap. Please check the openspec/ directory and fix any missing or malformed files.'
       }).promise;
     }

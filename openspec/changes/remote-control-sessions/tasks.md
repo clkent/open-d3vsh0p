@@ -6,16 +6,16 @@
 
 ## 2. Configuration
 
-- [ ] 2.1 Add `remoteControl` (`enabled`, `serverName`) to `config/defaults.json`
-- [ ] 2.2 Add the `config.local.json` overlay to `infra/config.js` (defaults → overlay → project) with a descriptive error on malformed JSON; add `config.local.json` to `.gitignore`
-- [ ] 2.3 Tests for overlay merge order, missing and malformed overlay
+- [x] 2.1 Add `remoteControl` (`enabled`, `serverName`) to `config/defaults.json`
+- [x] 2.2 Add the `config.local.json` overlay to `infra/config.js` (defaults → overlay → project) with a descriptive error on malformed JSON; add `config.local.json` to `.gitignore`
+- [x] 2.3 Tests for overlay merge order, missing and malformed overlay
 
 ## 3. Remote Control Sessions
 
-- [ ] 3.1 `buildClaudeArgs` gains `remoteControl` and emits `--remote-control <name>` when set
-- [ ] 3.2 Add `--remote-control` to `parseArgs` and config assembly (`remoteControl: true | null`); resolve the effective value in `run`, `talk`, `pair`, `kickoff` from CLI flag then `loadConfig`
-- [ ] 3.3 Ensure run-loop respawns (limit resume, nudge) pass the same `remoteControl` value and name
-- [ ] 3.4 Tests for args, flag precedence, respawn; update CLI help text
+- [x] 3.1 `buildClaudeArgs` gains `remoteControl` and emits `--remote-control <name>` when set
+- [x] 3.2 Add `--remote-control` to `parseArgs` and config assembly (`remoteControl: true | null`); resolve the effective value in `run`, `talk`, `pair`, `kickoff` from CLI flag then `loadConfig`
+- [x] 3.3 Ensure run-loop respawns (limit resume, nudge) pass the same `remoteControl` value and name
+- [x] 3.4 Tests for args, flag precedence, respawn; update CLI help text
 
 ## 4. Control Directory and Template
 

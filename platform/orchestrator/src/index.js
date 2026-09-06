@@ -18,6 +18,7 @@ async function main() {
       fresh: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
       'no-auto-resume': { type: 'boolean', default: false },
+      'remote-control': { type: 'boolean', default: false },
       requirements: { type: 'string' },
       window: { type: 'string' },
       type: { type: 'string' },
@@ -54,7 +55,10 @@ async function main() {
     }
     const registry = await loadRegistry();
     const { kickoffCommand } = require('./commands/kickoff');
-    const exitCode = await kickoffCommand(projectName, registry, saveRegistry, { design: values.design });
+    const exitCode = await kickoffCommand(projectName, registry, saveRegistry, {
+      design: values.design,
+      remoteControl: values['remote-control'] || null
+    });
     process.exit(exitCode);
   }
 
@@ -116,6 +120,8 @@ async function main() {
     fresh: values.fresh,
     dryRun: values['dry-run'],
     autoResume: !values['no-auto-resume'],
+    // true when --remote-control was passed; null lets the config layers decide
+    remoteControl: values['remote-control'] || null,
     requirements: values.requirements ? values.requirements.split(',').map(s => s.trim()) : null,
     window: values.window || null,
     templatesDir: TEMPLATES_DIR,
@@ -226,6 +232,7 @@ Session commands (during kickoff, plan, talk, pair):
 Options:
   --resume                 Resume a previously interrupted session
   --no-auto-resume         Don't auto-resume after a usage-limit stop (run)
+  --remote-control         Also expose the session in the Claude app via Remote Control (kickoff, talk, pair, run)
   --fresh                  Start a fresh session (ignore saved state)
   --requirements <ids>     Comma-separated requirement IDs to work on
   --window <name>          Run in a specific time window (night/morning/day)
@@ -251,6 +258,7 @@ Examples:
   ./devshop talk my-app
   ./devshop pair my-app
   ./devshop pair my-app --resume
+  ./devshop run my-app --remote-control
   ./devshop schedule install my-app
   ./devshop schedule pause my-app
   ./devshop schedule resume my-app

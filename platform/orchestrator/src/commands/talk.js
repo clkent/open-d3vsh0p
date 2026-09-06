@@ -89,6 +89,8 @@ async function talkCommand(project, cliConfig) {
 
   // Initialize modules
   const config = await loadConfig(cliConfig);
+  // --remote-control wins; otherwise the config layers (project > local > defaults)
+  const remoteControl = cliConfig.remoteControl ?? config.remoteControl?.enabled === true;
   const sessionId = generateSessionId('talk');
   const { logsDir } = getOrchestratorPaths(cliConfig);
   const logger = new Logger(`talk-${sessionId}`, logsDir);
@@ -162,6 +164,7 @@ async function talkCommand(project, cliConfig) {
         sessionId: claudeSessionId,
         resume: resumeSessionId,
         name: `Riley — ${cliConfig.projectId}`,
+        remoteControl,
         initialPrompt: resumeSessionId ? undefined : 'Greet me and ask what I\'d like to discuss about this project.'
       }).promise;
       isFirstRun = false;
@@ -172,6 +175,7 @@ async function talkCommand(project, cliConfig) {
         continueSession: true,
         model: talkAgentConfig?.model,
         name: `Riley — ${cliConfig.projectId}`,
+        remoteControl,
         initialPrompt: 'I re-entered the session because there were format validation issues. Please check and fix any roadmap or requirements format problems in the openspec/ directory.'
       }).promise;
     }

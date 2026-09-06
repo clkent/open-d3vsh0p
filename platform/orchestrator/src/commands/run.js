@@ -69,6 +69,8 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
 
   const fullConfig = await loadConfig(config);
   const morganConfig = fullConfig.agents?.['principal-engineer'] || fullConfig.agents?.['pair'] || {};
+  // --remote-control wins; otherwise the config layers (project > local > defaults)
+  const remoteControl = config.remoteControl ?? fullConfig.remoteControl?.enabled === true;
 
   // Snapshot roadmap state before the session (for post-session diff)
   const preRoadmap = await roadmapReader.parse();
@@ -198,6 +200,7 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
       sessionId: claudeSessionId,
       resume: (resumeSessionId || isResume) ? effectiveSessionId : undefined,
       name: `Morgan — ${config.projectId}`,
+      remoteControl,
       initialPrompt: reason === 'nudge'
         ? nudgePrompt
         : (resumeSessionId || isResume) ? continuationPrompt : initialPrompt
@@ -222,7 +225,8 @@ async function executeRun(project, config, registry, saveRegistry, windowName) {
       fullConfig,
       model: morganConfig.model,
       resumeSessionId: claudeSessionId || resumeSessionId,
-      projectId: config.projectId
+      projectId: config.projectId,
+      remoteControl
     }));
   }
 
@@ -589,7 +593,7 @@ const REPAIR_TIME_LIMIT_MS = 15 * 60 * 1000;
  * REPAIR_TIME_LIMIT_MS). Returns true when healthy (or no checks resolve),
  * false when the health check is still failing after all repair attempts.
  */
-async function verifyPostSessionHealth({ projectDir, fullConfig, model, resumeSessionId, projectId }) {
+async function verifyPostSessionHealth({ projectDir, fullConfig, model, resumeSessionId, projectId, remoteControl }) {
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
     console.log('');
     console.log('  Running post-session health check...');
@@ -620,6 +624,7 @@ async function verifyPostSessionHealth({ projectDir, fullConfig, model, resumeSe
       resume: resumeSessionId,
       model,
       name: `Morgan (repair) — ${projectId}`,
+      remoteControl,
       initialPrompt: repairPrompt
     });
 

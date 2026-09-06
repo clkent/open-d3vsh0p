@@ -113,6 +113,26 @@ Shows roadmap progress, completed/pending/parked items, and active session state
 4. `./devshop pair my-app` — debug issues with Morgan
 5. `./devshop run my-app --resume` — continue building
 
+## Use from your phone
+
+Every interactive session (kickoff, talk, pair, run) can also be opened in the Claude app or at claude.ai/code through Claude Code's built-in [Remote Control](https://code.claude.com/docs/en/remote-control). The session keeps running on your Mac; the app shows the same conversation, forwards Morgan's questions and permission prompts, and can push a notification when he needs a decision.
+
+Turn it on for one session:
+
+```bash
+./devshop run my-app --remote-control
+```
+
+Or for every session on this machine, in a gitignored `config.local.json` at the repo root:
+
+```json
+{ "remoteControl": { "enabled": true } }
+```
+
+A per-project `active-agents/<project>/orchestrator/config.json` can override the machine setting either way. Sessions appear in the app's Code tab under their agent and project name (`Morgan — my-app`, `Riley — my-app`), and the flag is kept when a run respawns Morgan after a usage-limit wait or an idle continuation.
+
+Requirements: sign in with `claude auth login` using a claude.ai account (an API key or `claude setup-token` token cannot establish Remote Control). To get push notifications, run `/config` inside a session and enable **Push when actions required**. If Remote Control cannot connect, the session still runs normally in the terminal and shows a failure notice.
+
 ## Testing
 
 ```bash
