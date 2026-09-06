@@ -62,7 +62,6 @@ _Only pending (unimplemented) requirements are listed here. See `openspec/specs/
 
 ### Remote Operation
 
-- Remote Control on every interactive session (`remoteControl.enabled` / `--remote-control`) for phone chat via the Claude app
-- Claude Code hooks injected at spawn via `--settings` (merged with project hooks) and run-lifecycle events posted to a localhost event sink
-- `devshop slack` bridge: Socket Mode with stdlib `WebSocket`/`fetch`, allowlisted commands, tmux-hosted sessions, thread-per-session with `send-keys` reply delivery, launchd install
-- Machine-level `config.local.json` overlay and Slack tokens from root `.env`
+- Remote Control on every interactive session (`remoteControl.enabled` / `--remote-control`) so Riley and Morgan sessions appear in the Claude app, named per agent and project
+- `devshop remote` control server: persistent `claude remote-control` session in a dedicated control directory that launches orchestrator commands into detached tmux sessions, lists and stops them, and installs under launchd
+- Machine-level `config.local.json` overlay merged between defaults and per-project overrides

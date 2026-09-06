@@ -240,12 +240,8 @@
 <!-- depends: Phase XIX -->
 
 ### Group A: Phone Access
-- [ ] `remote-control-sessions` — Start `kickoff`/`talk`/`pair`/`run` sessions with Claude Code Remote Control (`remoteControl.enabled` config or `--remote-control` flag) so the same local session is reachable from the Claude mobile app with full transcript sync and push notifications for questions
+- [ ] `remote-control-sessions` — Start `kickoff`/`talk`/`pair`/`run` sessions with Claude Code Remote Control (`remoteControl.enabled` config or `--remote-control` flag, named per agent and project, kept across run-loop respawns) so the same local session is reachable from the Claude mobile app with full transcript sync, forwarded questions, and push notifications
 
-### Group B: Session Events
+### Group B: Control Server
 <!-- depends: Phase XX Group A -->
-- [ ] `session-event-hooks` — Inject Claude Code hooks (`Stop`, `Notification`, `SessionEnd`, `PreToolUse` on `AskUserQuestion`) via `--settings` at spawn, merged with project hooks, plus run-lifecycle events (limit wait, idle continue, run complete, health failed, consolidation, HUMAN items) posted to a localhost event sink; silent no-op when nothing listens
-
-### Group C: Slack Bridge
-<!-- depends: Phase XX Group B -->
-- [ ] `slack-control` — `devshop slack` Socket Mode bridge daemon (zero-dependency, launchd-installable): allowlisted commands (`run`, `talk`, `pair`, `kickoff`, `status`, `stop`, `sessions`) from a phone, tmux-hosted sessions so Slack thread replies reach the terminal via `send-keys`, one thread per session mirroring agent messages, questions, permission prompts, idle stops, and run summaries
+- [ ] `remote-control-server` — `devshop remote` command family: a persistent `claude remote-control` control session in `active-agents/remote/` with a generated CLAUDE.md and narrow permissions, `launch` that starts orchestrator commands detached in named tmux sessions with `--remote-control`, `sessions` and graceful `stop`, and launchd `install`/`remove`/`status` (server runs inside tmux, restart loop with `--continue`)

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Commands
-The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk`, `pair`, `status`, `schedule`, `cadence`, `action`, `recover`, `security`, `api`, `slack`, and `help`. The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1. The `slack` command SHALL take a subcommand (`start`, `install`, `remove`, `status`) and no project argument.
+The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk`, `pair`, `status`, `schedule`, `cadence`, `action`, `recover`, `security`, `api`, `remote`, and `help`. The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1. The `remote` command SHALL take a subcommand (`start`, `install`, `remove`, `status`, `launch`, `sessions`, `stop`); only `launch` and `stop` take a project argument.
 
 #### Scenario: Valid command dispatch
 - **WHEN** `node src/index.js run my-project` is executed
@@ -19,12 +19,12 @@ The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk
 - **WHEN** `node src/index.js help` is executed
 - **THEN** the system SHALL print usage showing all commands, options, and examples, then exit with code 0
 
-#### Scenario: Slack subcommand dispatch
-- **WHEN** `node src/index.js slack start` is executed
-- **THEN** the system SHALL dispatch to the `slackCommand` handler with subcommand `start` without requiring or resolving a project
+#### Scenario: Remote subcommand dispatch
+- **WHEN** `node src/index.js remote start` is executed
+- **THEN** the system SHALL dispatch to the `remoteCommand` handler with subcommand `start` without requiring or resolving a project
 
-#### Scenario: Slack without subcommand
-- **WHEN** `node src/index.js slack` is executed
+#### Scenario: Remote without subcommand
+- **WHEN** `node src/index.js remote` is executed
 - **THEN** the system SHALL print an error naming the valid subcommands, display usage, and exit with code 1
 
 ### Requirement: Option Parsing
