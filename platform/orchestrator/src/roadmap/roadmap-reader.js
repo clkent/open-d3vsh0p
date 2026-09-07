@@ -133,9 +133,11 @@ class RoadmapReader {
   /**
    * Get phase numbers for all phases whose dependencies are satisfied.
    * A phase is actionable when all items in its dependency phases are complete
-   * or parked. A dependency that names no phase in the roadmap blocks the
-   * phase (fail closed): the run's idle-continuation gate relies on this, and
-   * a phantom "actionable" phase would nudge Morgan for work that isn't there.
+   * or parked — except Group Z (user-testing checkpoints), which never block
+   * the next phase; Morgan's execution rules say the same. A dependency that
+   * names no phase in the roadmap blocks the phase (fail closed): the run's
+   * idle-continuation gate relies on this, and a phantom "actionable" phase
+   * would nudge Morgan for work that isn't there.
    */
   getActionablePhaseNumbers(roadmap) {
     const actionable = [];
@@ -148,6 +150,7 @@ class RoadmapReader {
         const depPhase = roadmap.phases.find(p => p.number === depNumber);
         if (!depPhase) return false;
         return depPhase.groups.every(g =>
+          g.letter === 'Z' ||
           g.items.every(i => i.status === 'complete' || i.status === 'parked')
         );
       });
