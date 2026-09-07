@@ -9,10 +9,8 @@ IMPLEMENTED
 ## Source Files
 - `platform/orchestrator/src/roadmap/roadmap-reader.js` — roadmap.md parsing, dependency resolution, status tracking, and item marking
 - `templates/agents/_shared/sub-agent-delegation.md` — shared rules for Morgan's sub-agent delegation with worktree isolation
-
 ## Requirements
-
-### Roadmap Parsing
+### Requirement: Roadmap Parsing
 The system SHALL parse a `roadmap.md` file from `{projectDir}/openspec/roadmap.md` into a structured hierarchy of phases, groups, and items.
 
 The title SHALL be extracted from the pattern `# Roadmap: {title}`.
@@ -39,30 +37,48 @@ Items SHALL be extracted from checkbox lines matching `- [{marker}] \`{id}\` -- 
 - **WHEN** `getAllItems(roadmap)` is called
 - **THEN** the result SHALL be a flat array of all items across all phases and groups, each augmented with `phaseNumber`, `phaseLabel`, `groupLetter`, and `groupLabel`
 
-### Phase Dependencies
+### Requirement: Phase Dependencies
 The system SHALL resolve phase dependencies from explicit HTML comments and implicit ordering.
 
-Explicit dependencies SHALL be declared via `<!-- depends: Phase {number} -->` comments within a phase section.
+Explicit dependencies SHALL be declared via `<!-- depends: Phase {number} -->` comments within a phase section. The system SHALL extract every `Phase {number}` reference in the comment and ignore any other text (for example a note such as `; blocked on a vendor account`). A comment containing no phase references SHALL yield an empty dependency list.
 
-Implicit dependencies SHALL be set automatically: each phase after the first SHALL depend on the immediately preceding phase unless an explicit dependency is declared.
+Implicit dependencies SHALL be set automatically: each phase after the first SHALL depend on the immediately preceding phase unless an explicit dependency comment is present.
+
+A phase SHALL be actionable only when every dependency resolves to a phase in the roadmap whose items are all complete or parked. A dependency that does not resolve to any phase SHALL block the phase.
 
 #### Scenario: Explicit dependency
 - **WHEN** Phase II contains `<!-- depends: Phase I -->` in the roadmap
-- **THEN** Phase II's `depends` property SHALL be set to `"I"`
+- **THEN** Phase II's `depends` property SHALL be `["I"]`
+
+#### Scenario: Dependency with a trailing note
+- **WHEN** Phase III contains `<!-- depends: Phase II; blocked on a vendor account -->`
+- **THEN** Phase III's `depends` property SHALL be `["II"]`
+
+#### Scenario: Multiple references with text between them
+- **WHEN** a phase contains `<!-- depends: Phase IV and Phase V -->`
+- **THEN** its `depends` property SHALL be `["IV", "V"]`
+
+#### Scenario: Comment without references
+- **WHEN** a phase contains `<!-- depends: none -->`
+- **THEN** its `depends` property SHALL be `[]` and the phase SHALL be actionable
 
 #### Scenario: Implicit dependency
 - **WHEN** Phase III has no explicit depends comment and Phase II is the preceding phase with number "II"
-- **THEN** Phase III's `depends` property SHALL be set to `"II"`
+- **THEN** Phase III's `depends` property SHALL be `["II"]`
 
 #### Scenario: First phase has no dependency
 - **WHEN** the first phase in the roadmap has no depends comment
 - **THEN** its `depends` property SHALL remain null, making it immediately eligible for execution
 
+#### Scenario: Unknown dependency blocks
+- **WHEN** Phase II contains `<!-- depends: Phase IX -->` and no Phase IX exists
+- **THEN** `getActionablePhaseNumbers` SHALL NOT include Phase II
+
 #### Scenario: Dependency enforcement by Morgan
 - **WHEN** Morgan works the roadmap and a phase's dependency phase still has pending items
 - **THEN** Morgan SHALL NOT start that phase, per the roadmap execution rules in his orchestration prompt
 
-### Group Concurrency
+### Requirement: Group Concurrency
 The system SHALL support two modes of group concurrency within a phase:
 
 1. **Morgan-delegated**: Morgan spawns sub-agents via the Claude Code Agent tool with `isolation: "worktree"` for each independent group. Morgan writes targeted briefs and reviews output before marking items complete.
@@ -82,14 +98,14 @@ Morgan SHALL decide which mode to use based on the phase structure and item comp
 - **WHEN** a sub-agent completes its delegated work
 - **THEN** Morgan SHALL review the changes for consistency with the broader codebase before accepting them
 
-### Git Worktrees for Delegated Groups
+### Requirement: Git Worktrees for Delegated Groups
 When Morgan delegates a group to a sub-agent, worktree isolation SHALL be handled by the Claude Code Agent tool's `isolation: "worktree"` parameter, which gives the sub-agent an isolated copy of the repository.
 
 #### Scenario: Sub-agent worktree via Agent tool
 - **WHEN** Morgan spawns a sub-agent with `isolation: "worktree"`
 - **THEN** the Agent tool SHALL create a temporary git worktree for the sub-agent, and clean it up when the sub-agent completes
 
-### Roadmap Status Updates
+### Requirement: Roadmap Status Updates
 The system SHALL update the roadmap.md file in-place to reflect item completion or parking.
 
 Morgan SHALL edit roadmap.md directly to mark items complete by changing `[ ]` to `[x]` after implementing each item and verifying tests pass.
@@ -109,3 +125,4 @@ Morgan SHALL mark items parked by editing the checkbox marker to `[!]` directly 
 #### Scenario: Regex escaping in requirement IDs
 - **WHEN** a requirement ID contains regex-special characters (e.g., dots or brackets)
 - **THEN** the system SHALL escape them via `_escapeRegex` before constructing the replacement pattern
+
