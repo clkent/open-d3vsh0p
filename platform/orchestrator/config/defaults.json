@@ -50,7 +50,6 @@
     "nativeBuildTimeoutMs": 300000
   },
   "remoteControl": {
-    "enabled": false,
-    "serverName": "d3vsh0p control"
+    "enabled": false
   }
 }

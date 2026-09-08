@@ -9,11 +9,9 @@ IMPLEMENTED
 ## Source Files
 - `platform/orchestrator/src/infra/config.js` -- loadConfig, loadDefaults, deepMerge functions
 - `platform/orchestrator/config/defaults.json` -- default configuration values
-
 ## Requirements
-
-### Default Configuration
-The system SHALL ship a `defaults.json` file containing baseline values for all orchestrator settings: `agents` (four roles) and `healthCheck` settings (`commands`, `timeoutMs`, `nativeBuildTimeoutMs`). The defaults SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
+### Requirement: Default Configuration
+The system SHALL ship a `defaults.json` file containing baseline values for all orchestrator settings: `agents` (four roles), `healthCheck` settings (`commands`, `timeoutMs`, `nativeBuildTimeoutMs`), and `remoteControl` (`enabled: false`). The defaults SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
 
 #### Scenario: No session budget or time defaults
 - **WHEN** loadDefaults() is called
@@ -23,7 +21,11 @@ The system SHALL ship a `defaults.json` file containing baseline values for all 
 - **WHEN** loadDefaults() is called
 - **THEN** `healthCheck` SHALL contain `commands: []`, `timeoutMs: 120000`, and `nativeBuildTimeoutMs: 300000`
 
-### Per-Agent Configuration
+#### Scenario: Remote Control default is off
+- **WHEN** loadDefaults() is called
+- **THEN** `remoteControl.enabled` SHALL be false
+
+### Requirement: Per-Agent Configuration
 The system SHALL define four agent roles in `defaults.json`, each with `maxBudgetUsd`, `timeoutMs`, and `allowedTools`. The roles SHALL be: `principal-engineer` (budget: $2.00, timeout: 120s, tools: Read/Glob/Grep/Bash), `security` (budget: $1.00, timeout: 120s, tools: Read/Glob/Grep), `pair` (budget: $5.00, timeout: 600s, tools: Bash/Read/Write/Glob/Grep/Edit), and `pm` (budget: $2.00, timeout: 300s, tools: Bash/Read/Write/Glob/Grep/Edit).
 
 #### Scenario: Principal engineer defaults
@@ -38,7 +40,7 @@ The system SHALL define four agent roles in `defaults.json`, each with `maxBudge
 - **WHEN** loadDefaults() is called
 - **THEN** `agents.pm.allowedTools` SHALL include Bash, Read, Write, Glob, Grep, and Edit
 
-### Project Overrides
+### Requirement: Project Overrides
 The system SHALL load project-specific overrides from `active-agents/{project}/orchestrator/config.json`. If the file does not exist, the system SHALL return an empty object (no overrides). Overrides are merged on top of defaults.
 
 #### Scenario: Project override file exists
@@ -53,7 +55,7 @@ The system SHALL load project-specific overrides from `active-agents/{project}/o
 - **WHEN** `loadConfig` is called with `cliOptions.activeAgentsDir` undefined
 - **THEN** project overrides SHALL be skipped and only defaults used
 
-### CLI Option Priority
+### Requirement: CLI Option Priority
 The system SHALL merge configuration in priority order: CLI options > project overrides > defaults. The system SHALL NOT apply special-case CLI overrides for `budgetLimitUsd` or `timeLimitMs`; project override files that still contain these keys SHALL be merged without error but SHALL have no effect on run behavior.
 
 #### Scenario: CLI option not provided falls through
@@ -64,7 +66,7 @@ The system SHALL merge configuration in priority order: CLI options > project ov
 - **WHEN** a project's `orchestrator/config.json` contains `budgetLimitUsd` or `timeLimitMs`
 - **THEN** loadConfig SHALL complete without error and no session budget or time limit SHALL be enforced
 
-### Deep Merge Behavior
+### Requirement: Deep Merge Behavior
 The system SHALL recursively merge nested objects from source into target. Arrays SHALL be replaced entirely (not concatenated). Primitive values from source SHALL overwrite target. Only plain objects (non-array) are recursively merged.
 
 #### Scenario: Nested object merge
@@ -78,3 +80,23 @@ The system SHALL recursively merge nested objects from source into target. Array
 #### Scenario: New keys added from override
 - **WHEN** defaults has `{ a: 1 }` and override has `{ b: 2 }`
 - **THEN** the result SHALL be `{ a: 1, b: 2 }`
+
+### Requirement: Local Configuration Overlay
+The system SHALL load an optional machine-level overlay from `<devshopRoot>/config.local.json` and merge it on top of `defaults.json` and beneath per-project overrides, so the priority order is CLI options > project overrides > local overlay > defaults. The file SHALL be gitignored. A missing file SHALL yield an empty overlay; a file with invalid JSON SHALL cause `loadConfig` to throw a descriptive error naming the path.
+
+#### Scenario: Overlay applied
+- **WHEN** `config.local.json` contains `{ "remoteControl": { "enabled": true } }`
+- **THEN** `loadConfig` SHALL return `remoteControl.enabled: true` with the other defaults intact
+
+#### Scenario: Project override wins over overlay
+- **WHEN** the overlay sets `remoteControl.enabled: true` and the project's `orchestrator/config.json` sets `remoteControl.enabled: false`
+- **THEN** `loadConfig` SHALL return `remoteControl.enabled: false` for that project
+
+#### Scenario: Overlay missing
+- **WHEN** `config.local.json` does not exist
+- **THEN** `loadConfig` SHALL behave as if the overlay were `{}`
+
+#### Scenario: Overlay malformed
+- **WHEN** `config.local.json` contains invalid JSON
+- **THEN** `loadConfig` SHALL throw an error that includes the file path
+

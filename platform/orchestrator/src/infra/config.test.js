@@ -149,7 +149,7 @@ describe('config', () => {
 
       const config = await lc({ activeAgentsDir: '/tmp/fake-agents' });
       assert.equal(config.remoteControl.enabled, true, 'overlay applied');
-      assert.equal(config.remoteControl.serverName, 'd3vsh0p control', 'untouched default kept');
+      assert.equal(config.healthCheck.nativeBuildTimeoutMs, 300000, 'untouched default kept');
       assert.equal(config.healthCheck.timeoutMs, 2000, 'project override wins over overlay');
 
       fs.readFile = originalReadFile;
@@ -179,7 +179,6 @@ describe('config', () => {
     it('ships remoteControl defaults switched off', async () => {
       const defaults = await loadDefaults();
       assert.equal(defaults.remoteControl.enabled, false);
-      assert.equal(defaults.remoteControl.serverName, 'd3vsh0p control');
     });
 
     it('handles missing override file gracefully', async () => {

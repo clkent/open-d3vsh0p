@@ -1,5 +1,7 @@
 # Proposal: remote-control-sessions
 
+> **Scope change, 2026-09-08.** Only the first bullet below shipped (`remote-control-sessions`, PR #52). The control server, detached tmux launcher, and launchd installation (`remote-control-server`) were built on a branch, reviewed, and deliberately **not merged**: sessions started at the terminal are already reachable from the Claude app, and an always-on, phone-driven entry point that starts permission-skipping agents was judged more exposure than value at this stage. The branch and its PR were closed; nothing from it is on main. The capability is deferred, not archived as done.
+
 ## Why
 
 Every d3vsh0p session (kickoff, talk, run, pair) is an interactive Claude Code CLI bound to a terminal on one Mac. Once the operator walks away there is no way to start a run, answer a question Riley or Morgan asks, or learn that Morgan stopped, other than sitting back down at that terminal. Claude Code's built-in Remote Control already connects a local session to the Claude mobile app with full transcript sync, forwarded question dialogs, and push notifications, so the cheapest way to make d3vsh0p phone-operable is to turn that on for every session and add a thin launcher for starting sessions remotely. A Slack bridge was evaluated and rejected: it would re-implement, with less fidelity, what Remote Control provides.

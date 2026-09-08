@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Commands
-The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk`, `pair`, `status`, `schedule`, `cadence`, `action`, `recover`, `security`, `api`, `remote`, and `help`. The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1. The `remote` command SHALL take a subcommand (`start`, `install`, `remove`, `status`, `launch`, `sessions`, `stop`); only `launch` and `stop` take a project argument.
+The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk`, `pair`, `status`, `schedule`, `cadence`, `action`, `recover`, `security`, `api`, and `help`. The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1.
 
 #### Scenario: Valid command dispatch
 - **WHEN** `node src/index.js run my-project` is executed
@@ -18,14 +18,6 @@ The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk
 #### Scenario: Help command
 - **WHEN** `node src/index.js help` is executed
 - **THEN** the system SHALL print usage showing all commands, options, and examples, then exit with code 0
-
-#### Scenario: Remote subcommand dispatch
-- **WHEN** `node src/index.js remote start` is executed
-- **THEN** the system SHALL dispatch to the `remoteCommand` handler with subcommand `start` without requiring or resolving a project
-
-#### Scenario: Remote without subcommand
-- **WHEN** `node src/index.js remote` is executed
-- **THEN** the system SHALL print an error naming the valid subcommands, display usage, and exit with code 1
 
 ### Requirement: Option Parsing
 The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30", consumed only by the `security` command as an enforced scan budget), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--no-auto-resume` (boolean, default false), `--remote-control` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Requirements SHALL be split by comma into an array of trimmed strings. The config SHALL expose `autoResume: true` unless `--no-auto-resume` is provided. The system SHALL NOT accept a `--time-limit` option and SHALL NOT derive a session time limit for the `run` command.

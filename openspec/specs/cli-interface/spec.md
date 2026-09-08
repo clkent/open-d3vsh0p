@@ -10,10 +10,8 @@ IMPLEMENTED
 - `platform/orchestrator/src/index.js` -- main CLI entry point with argument parsing, project resolution, and command dispatch
 - `platform/orchestrator/src/commands/run.js` -- run command handler that spawns Morgan as a Claude Code CLI session
 - `platform/orchestrator/src/commands/status.js` -- status command handler displaying roadmap and session information
-
 ## Requirements
-
-### Commands
+### Requirement: Commands
 The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk`, `pair`, `status`, `schedule`, `cadence`, `action`, `recover`, `security`, `api`, and `help`. The command SHALL be the first positional argument. An unrecognized command SHALL print an error message, display usage information, and exit with code 1.
 
 #### Scenario: Valid command dispatch
@@ -32,8 +30,8 @@ The system SHALL support the following commands: `kickoff`, `run`, `plan`, `talk
 - **WHEN** `node src/index.js help` is executed
 - **THEN** the system SHALL print usage showing all commands, options, and examples, then exit with code 0
 
-### Option Parsing
-The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30", consumed only by the `security` command as an enforced scan budget), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--no-auto-resume` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Requirements SHALL be split by comma into an array of trimmed strings. The config SHALL expose `autoResume: true` unless `--no-auto-resume` is provided. The system SHALL NOT accept a `--time-limit` option and SHALL NOT derive a session time limit for the `run` command.
+### Requirement: Option Parsing
+The system SHALL parse CLI options using `node:util` `parseArgs` with options including: `--budget` (string, default "30", consumed only by the `security` command as an enforced scan budget), `--resume` (boolean, default false), `--fresh` (boolean, default false), `--dry-run` (boolean, default false), `--no-auto-resume` (boolean, default false), `--remote-control` (boolean, default false), `--requirements` (string), `--window` (string), and `--port` (string, used by the `api` command, default 3200). Requirements SHALL be split by comma into an array of trimmed strings. The config SHALL expose `autoResume: true` unless `--no-auto-resume` is provided. The system SHALL NOT accept a `--time-limit` option and SHALL NOT derive a session time limit for the `run` command.
 
 #### Scenario: No time limit option
 - **WHEN** CLI options are parsed
@@ -63,7 +61,11 @@ The system SHALL parse CLI options using `node:util` `parseArgs` with options in
 - **WHEN** `--no-auto-resume` is provided
 - **THEN** config.autoResume SHALL be false
 
-### Run Command
+#### Scenario: Remote Control flag
+- **WHEN** `--remote-control` is provided with `run`, `talk`, `pair`, or `kickoff`
+- **THEN** config.remoteControl SHALL be true regardless of the `remoteControl.enabled` config value
+
+### Requirement: Run Command
 The system SHALL spawn Morgan (Principal Engineer) as a persistent Claude Code CLI session when the `run` command is executed. The run command SHALL manage the session lifecycle: acquire run lock, create session branch, render and pass the orchestration prompt, spawn Morgan CLI, and consolidate to main after Morgan exits.
 
 If no roadmap exists, the system SHALL exit with an error directing the user to run `devshop kickoff` first.
@@ -108,7 +110,7 @@ The exit code SHALL be 0 on normal completion and 1 when parked items remain.
 - **WHEN** `run` is executed with `--window morning`
 - **THEN** the system SHALL include autonomous mode instructions in Morgan's prompt, telling Morgan to work without waiting for user input
 
-### Status Command
+### Requirement: Status Command
 The system SHALL display project status including roadmap progress and active session state. It SHALL always return exit code 0.
 
 #### Scenario: Roadmap progress display
@@ -131,7 +133,7 @@ The system SHALL display project status including roadmap progress and active se
 - **WHEN** `status` is executed and no state.json exists
 - **THEN** the system SHALL display `Session: No active session`
 
-### Project Resolution
+### Requirement: Project Resolution
 The system SHALL resolve projects by looking up the `projectId` positional argument in `project-registry.json`. It SHALL validate that the project exists in the registry and that the project directory is accessible on disk.
 
 #### Scenario: Project found in registry
@@ -154,8 +156,8 @@ The system SHALL resolve projects by looking up the `projectId` positional argum
 - **WHEN** `node src/index.js run` is executed without a project ID
 - **THEN** the system SHALL print `Error: project-id is required`, display usage, and exit with code 1
 
-### Config Assembly
-The system SHALL assemble a config object from the resolved project and parsed CLI options, containing: `projectId`, `projectDir`, `githubRepo`, `resume`, `dryRun`, `requirements`, `templatesDir` (pointing to `templates/agents/`), and `activeAgentsDir` (pointing to `active-agents/{projectId}/`). The config SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
+### Requirement: Config Assembly
+The system SHALL assemble a config object from the resolved project and parsed CLI options, containing: `projectId`, `projectDir`, `githubRepo`, `resume`, `dryRun`, `requirements`, `remoteControl` (true when `--remote-control` was passed, otherwise null so the configuration layer decides), `templatesDir` (pointing to `templates/agents/`), and `activeAgentsDir` (pointing to `active-agents/{projectId}/`). The config SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
 
 #### Scenario: Templates directory resolution
 - **WHEN** the config is assembled
@@ -169,7 +171,11 @@ The system SHALL assemble a config object from the resolved project and parsed C
 - **WHEN** the config is assembled for the `run` command
 - **THEN** it SHALL NOT include `budgetLimitUsd` or `timeLimitMs`
 
-### Fatal Error Handling
+#### Scenario: Remote Control not requested
+- **WHEN** the config is assembled without `--remote-control`
+- **THEN** `remoteControl` SHALL be null and the effective value SHALL come from `loadConfig`
+
+### Requirement: Fatal Error Handling
 The system SHALL catch unhandled errors from the main function, print `Fatal error: {message}` to stderr, and exit with code 2. When the `DEBUG` environment variable is set, it SHALL also print the full stack trace.
 
 #### Scenario: Unhandled error
@@ -179,3 +185,4 @@ The system SHALL catch unhandled errors from the main function, print `Fatal err
 #### Scenario: Debug mode stack trace
 - **WHEN** an error occurs and `process.env.DEBUG` is set
 - **THEN** the full stack trace SHALL be printed to stderr in addition to the error message
+
