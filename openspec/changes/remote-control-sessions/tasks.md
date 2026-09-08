@@ -1,7 +1,7 @@
 ## 1. Spikes (verify before building)
 
 - [ ] 1.1 Verify `claude --remote-control "<name>"` starts under the current login, the session appears in the Claude app under that name, and an `AskUserQuestion` from Morgan is answerable from the phone
-- [ ] 1.2 Verify what the app shows when the run loop respawns Morgan with `--resume` (same remote session or a new entry); record the result in design.md and README
+- [x] 1.2 Verify what the app shows when the run loop respawns Morgan with `--resume` (same remote session or a new entry); record the result in design.md and README — same session, same chat window
 - [ ] 1.3 Verify `claude remote-control --spawn session` starts inside a launchd-launched tmux session with the claude.ai login and `PATH` available, and that the app can open the control session; capture the exit behavior after a forced network drop and confirm `--continue` resumes it
 
 ## 2. Configuration
