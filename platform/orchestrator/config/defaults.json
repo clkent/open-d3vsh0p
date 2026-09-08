@@ -1,29 +1,56 @@
 {
   "agents": {
     "principal-engineer": {
-      "maxBudgetUsd": 2.00,
+      "maxBudgetUsd": 2.0,
       "timeoutMs": 120000,
-      "allowedTools": ["Read", "Glob", "Grep", "Bash"]
+      "allowedTools": [
+        "Read",
+        "Glob",
+        "Grep",
+        "Bash"
+      ]
     },
     "security": {
-      "maxBudgetUsd": 1.00,
+      "maxBudgetUsd": 1.0,
       "timeoutMs": 120000,
-      "allowedTools": ["Read", "Glob", "Grep"]
+      "allowedTools": [
+        "Read",
+        "Glob",
+        "Grep"
+      ]
     },
     "pair": {
-      "maxBudgetUsd": 5.00,
+      "maxBudgetUsd": 5.0,
       "timeoutMs": 600000,
-      "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep", "Edit"]
+      "allowedTools": [
+        "Bash",
+        "Read",
+        "Write",
+        "Glob",
+        "Grep",
+        "Edit"
+      ]
     },
     "pm": {
-      "maxBudgetUsd": 2.00,
+      "maxBudgetUsd": 2.0,
       "timeoutMs": 300000,
-      "allowedTools": ["Bash", "Read", "Write", "Glob", "Grep", "Edit"]
+      "allowedTools": [
+        "Bash",
+        "Read",
+        "Write",
+        "Glob",
+        "Grep",
+        "Edit"
+      ]
     }
   },
   "healthCheck": {
     "commands": [],
     "timeoutMs": 120000,
     "nativeBuildTimeoutMs": 300000
+  },
+  "remoteControl": {
+    "enabled": false,
+    "serverName": "d3vsh0p control"
   }
 }

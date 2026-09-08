@@ -241,7 +241,7 @@
 <!-- depends: Phase XIX -->
 
 ### Group A: Phone Access
-- [ ] `remote-control-sessions` — Start `kickoff`/`talk`/`pair`/`run` sessions with Claude Code Remote Control (`remoteControl.enabled` config or `--remote-control` flag, named per agent and project, kept across run-loop respawns) so the same local session is reachable from the Claude mobile app with full transcript sync, forwarded questions, and push notifications
+- [x] `remote-control-sessions` — Start `kickoff`/`talk`/`pair`/`run` sessions with Claude Code Remote Control (`remoteControl.enabled` config or `--remote-control` flag, named per agent and project, kept across run-loop respawns) so the same local session is reachable from the Claude mobile app with full transcript sync, forwarded questions, and push notifications
 
 ### Group B: Control Server
 <!-- depends: Phase XX Group A -->

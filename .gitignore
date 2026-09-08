@@ -20,5 +20,8 @@ node_modules/
 .env
 .env.local
 
+# Machine-level orchestrator settings (remoteControl etc.)
+config.local.json
+
 # Claude Code local settings (machine-specific permissions)
 .claude/settings.local.json

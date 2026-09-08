@@ -92,6 +92,8 @@ async function pairCommand(project, cliConfig) {
 
   // Initialize modules
   const config = await loadConfig(cliConfig);
+  // --remote-control wins; otherwise the config layers (project > local > defaults)
+  const remoteControl = cliConfig.remoteControl ?? config.remoteControl?.enabled === true;
   const sessionId = generateSessionId('pair');
   const { logsDir } = getOrchestratorPaths(cliConfig);
   const logger = new Logger(sessionId, logsDir);
@@ -162,6 +164,7 @@ async function pairCommand(project, cliConfig) {
         sessionId: claudeSessionId,
         resume: resumeSessionId,
         name: `Morgan — ${cliConfig.projectId}`,
+        remoteControl,
         initialPrompt: resumeSessionId ? undefined : 'Introduce yourself and ask what I need help with.'
       }).promise;
       isFirstRun = false;
@@ -172,6 +175,7 @@ async function pairCommand(project, cliConfig) {
         continueSession: true,
         model: pairAgentConfig?.model,
         name: `Morgan — ${cliConfig.projectId}`,
+        remoteControl,
         initialPrompt: 'I re-entered the session because health checks failed. Please investigate and fix the failing checks.'
       }).promise;
     }

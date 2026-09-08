@@ -132,6 +132,56 @@ describe('config', () => {
       fs.readFile = originalReadFile;
     });
 
+    it('applies the config.local.json overlay beneath project overrides', async () => {
+      originalReadFile = fs.readFile;
+      const realReadFile = originalReadFile;
+      fs.readFile = async (filePath, ...args) => {
+        if (filePath.endsWith('config.local.json')) {
+          return JSON.stringify({ remoteControl: { enabled: true }, healthCheck: { timeoutMs: 1000 } });
+        }
+        if (filePath.includes('orchestrator/config.json')) {
+          return JSON.stringify({ healthCheck: { timeoutMs: 2000 } });
+        }
+        return realReadFile(filePath, ...args);
+      };
+      delete require.cache[require.resolve('./config')];
+      const { loadConfig: lc } = require('./config');
+
+      const config = await lc({ activeAgentsDir: '/tmp/fake-agents' });
+      assert.equal(config.remoteControl.enabled, true, 'overlay applied');
+      assert.equal(config.remoteControl.serverName, 'd3vsh0p control', 'untouched default kept');
+      assert.equal(config.healthCheck.timeoutMs, 2000, 'project override wins over overlay');
+
+      fs.readFile = originalReadFile;
+    });
+
+    it('throws a descriptive error naming the path when the overlay is malformed', async () => {
+      originalReadFile = fs.readFile;
+      const realReadFile = originalReadFile;
+      fs.readFile = async (filePath, ...args) => {
+        if (filePath.endsWith('config.local.json')) return '{ not json';
+        return realReadFile(filePath, ...args);
+      };
+      delete require.cache[require.resolve('./config')];
+      const { loadConfig: lc } = require('./config');
+
+      await assert.rejects(() => lc({}), /Invalid JSON in .*config\.local\.json/);
+
+      fs.readFile = originalReadFile;
+    });
+
+    it('treats a missing overlay as empty', async () => {
+      const { loadLocalOverlay } = require('./config');
+      const overlay = await loadLocalOverlay('/tmp/definitely-missing-' + Date.now() + '.json');
+      assert.deepEqual(overlay, {});
+    });
+
+    it('ships remoteControl defaults switched off', async () => {
+      const defaults = await loadDefaults();
+      assert.equal(defaults.remoteControl.enabled, false);
+      assert.equal(defaults.remoteControl.serverName, 'd3vsh0p control');
+    });
+
     it('handles missing override file gracefully', async () => {
       const config = await loadConfig({
         activeAgentsDir: '/tmp/definitely-does-not-exist-' + Date.now()
