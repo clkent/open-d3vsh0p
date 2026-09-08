@@ -246,4 +246,4 @@
 
 ### Group B: Control Server
 <!-- depends: Phase XX Group A -->
-- [ ] `remote-control-server` — `devshop remote` command family: a persistent `claude remote-control` control session in `active-agents/remote/` with a generated CLAUDE.md and narrow permissions, `launch` that starts orchestrator commands detached in named tmux sessions with `--remote-control`, `sessions` and graceful `stop`, and launchd `install`/`remove`/`status` (server runs inside tmux, restart loop with `--continue`)
+- [ ] `remote-control-server` — *(deferred 2026-09-08: built on a branch and closed unmerged — terminal-started sessions already continue from the Claude app, and an always-on phone-driven launcher was judged more exposure than value for now)* `devshop remote` command family: a persistent `claude remote-control` control session in `active-agents/remote/` with a generated CLAUDE.md and narrow permissions, `launch` that starts orchestrator commands detached in named tmux sessions with `--remote-control`, `sessions` and graceful `stop`, and launchd `install`/`remove`/`status` (server runs inside tmux, restart loop with `--continue`)

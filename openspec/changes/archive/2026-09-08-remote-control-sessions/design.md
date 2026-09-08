@@ -1,5 +1,7 @@
 # Design: remote-control-sessions
 
+> **Scope change, 2026-09-08.** D2 through D4 (control session, deterministic launcher, launchd-hosted server) were implemented on a branch and dropped before merge. Two findings from that review are worth keeping for whenever this is revisited: a control directory placed inside the repo inherits the repo's CLAUDE.md and `.claude/settings.local.json` allowances (it must live outside the repo, e.g. `~/.devshop/remote/`), and a `Bash(<prefix>:*)` pre-approval did not stop a chained `; whoami` in a non-interactive test, so launcher calls should prompt rather than be pre-approved.
+
 ## Context
 
 All four interactive commands spawn `claude` with `stdio: 'inherit'` (`cli-spawn.js`); the orchestrator never reads the session's output and has no write path into it. Claude Code Remote Control, verified against the current docs and the installed CLI (2.1.263):
@@ -49,7 +51,7 @@ Server mode expects a terminal (QR code on spacebar, status UI). `devshop remote
 
 ## Risks / Trade-offs
 
-- [Run-loop respawns after a limit wait or nudge start a new `claude` process, which registers a new remote session in the app] → The session name is stable, so the new entry is easy to find; spike 1.2 checks whether `--resume` re-registers as the same remote session. Documented either way.
+- [Run-loop respawns after a limit wait or nudge start a new `claude` process] → Verified 2026-09-08 (spike 1.2): a `--resume` respawn reconnects as the same remote session, so the app stays in the same chat with history intact.
 - [Server mode under launchd may not have a usable environment (`claude`, `node`, `tmux`, `gh` on PATH, keychain login)] → PATH is captured at install; spike 1.3 verifies server mode starts from a launchd-launched tmux and the claude.ai login is visible there.
 - [Server mode exits after ~10 minutes of network outage] → `remote start` restart loop with `--continue`.
 - [The control session has `--dangerously-skip-permissions`-free defaults and will ask for permission on Bash] → The generated control CLAUDE.md is paired with a `.claude/settings.json` in the control directory that allows only `Bash(./devshop remote *)`, `Bash(./devshop status *)`, `Bash(tmux ls)`, and read tools; nothing else is pre-approved, and other actions still prompt through the app.

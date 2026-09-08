@@ -129,7 +129,7 @@ Or for every session on this machine, in a gitignored `config.local.json` at the
 { "remoteControl": { "enabled": true } }
 ```
 
-A per-project `active-agents/<project>/orchestrator/config.json` can override the machine setting either way. Sessions appear in the app's Code tab under their agent and project name (`Morgan — my-app`, `Riley — my-app`), and the flag is kept when a run respawns Morgan after a usage-limit wait or an idle continuation.
+A per-project `active-agents/<project>/orchestrator/config.json` can override the machine setting either way. Sessions appear in the app's Code tab under their agent and project name (`Morgan — my-app`, `Riley — my-app`), and the flag is kept when a run respawns Morgan after a usage-limit wait or an idle continuation. A respawn reconnects to the same session in the app, so the chat and its history stay where they were.
 
 Requirements: sign in with `claude auth login` using a claude.ai account (an API key or `claude setup-token` token cannot establish Remote Control). To get push notifications, run `/config` inside a session and enable **Push when actions required**. If Remote Control cannot connect, the session still runs normally in the terminal and shows a failure notice.
 

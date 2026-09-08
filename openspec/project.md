@@ -63,5 +63,5 @@ _Only pending (unimplemented) requirements are listed here. See `openspec/specs/
 ### Remote Operation
 
 - Remote Control on every interactive session (`remoteControl.enabled` / `--remote-control`) so Riley and Morgan sessions appear in the Claude app, named per agent and project
-- `devshop remote` control server: persistent `claude remote-control` session in a dedicated control directory that launches orchestrator commands into detached tmux sessions, lists and stops them, and installs under launchd
+- `devshop remote` control server: **deferred** (2026-09-08) — a phone-driven launcher was built and closed unmerged; revisit only with the control directory outside the repo and no pre-approved Bash rules
 - Machine-level `config.local.json` overlay merged between defaults and per-project overrides

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Default Configuration
-The system SHALL ship a `defaults.json` file containing baseline values for all orchestrator settings: `agents` (four roles), `healthCheck` settings (`commands`, `timeoutMs`, `nativeBuildTimeoutMs`), and `remoteControl` (`enabled: false`, `serverName: "d3vsh0p control"`). The defaults SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
+The system SHALL ship a `defaults.json` file containing baseline values for all orchestrator settings: `agents` (four roles), `healthCheck` settings (`commands`, `timeoutMs`, `nativeBuildTimeoutMs`), and `remoteControl` (`enabled: false`). The defaults SHALL NOT contain `budgetLimitUsd` or `timeLimitMs`.
 
 #### Scenario: No session budget or time defaults
 - **WHEN** loadDefaults() is called
@@ -13,7 +13,7 @@ The system SHALL ship a `defaults.json` file containing baseline values for all 
 
 #### Scenario: Remote Control default is off
 - **WHEN** loadDefaults() is called
-- **THEN** `remoteControl.enabled` SHALL be false and `remoteControl.serverName` SHALL be `"d3vsh0p control"`
+- **THEN** `remoteControl.enabled` SHALL be false
 
 ## ADDED Requirements
 
@@ -22,7 +22,7 @@ The system SHALL load an optional machine-level overlay from `<devshopRoot>/conf
 
 #### Scenario: Overlay applied
 - **WHEN** `config.local.json` contains `{ "remoteControl": { "enabled": true } }`
-- **THEN** `loadConfig` SHALL return `remoteControl.enabled: true` with `remoteControl.serverName` still at its default
+- **THEN** `loadConfig` SHALL return `remoteControl.enabled: true` with the other defaults intact
 
 #### Scenario: Project override wins over overlay
 - **WHEN** the overlay sets `remoteControl.enabled: true` and the project's `orchestrator/config.json` sets `remoteControl.enabled: false`
