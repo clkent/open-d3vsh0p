@@ -45,7 +45,7 @@ templates/project-starter/      — Starter code copied when creating new projec
 The roadmap organizes work into phases (sequential, with dependencies) containing groups (independent work). The principal engineer works through phases in order, implementing items or delegating groups to sub-agents when parallelism helps.
 
 ### CLI Sessions
-All interactive commands (kickoff, run, talk, pair) spawn Claude Code CLI sessions with `stdio: 'inherit'`. The user interacts directly with the agent. Sessions can be resumed with `--resume`. Passing `--remote-control` (or setting `remoteControl.enabled` in the gitignored `config.local.json`) also exposes the session in the Claude app via Claude Code Remote Control.
+All interactive commands (kickoff, run, talk, pair) spawn Claude Code CLI sessions with `stdio: 'inherit'`. The user interacts directly with the agent. Sessions can be resumed with `--resume`. Passing `--remote-control` (or setting `remoteControl.enabled` in the gitignored `config.local.json`) also exposes the session in the Claude app via Claude Code Remote Control. `devshop remote` runs a persistent control session (server mode, launchd-installable, tmux-hosted) from which the operator's phone can launch `run`/`talk`/`pair`/`kickoff` detached into tmux, list and stop them.
 
 ### Git Strategy
 - The principal engineer commits directly on the current branch during runs

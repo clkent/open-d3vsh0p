@@ -133,6 +133,24 @@ A per-project `active-agents/<project>/orchestrator/config.json` can override th
 
 Requirements: sign in with `claude auth login` using a claude.ai account (an API key or `claude setup-token` token cannot establish Remote Control). To get push notifications, run `/config` inside a session and enable **Push when actions required**. If Remote Control cannot connect, the session still runs normally in the terminal and shows a failure notice.
 
+### Start sessions from your phone
+
+Remote Control only reaches sessions that already exist. To start one without a terminal, run the d3vsh0p **control session**: a persistent `claude remote-control` server that lives in `active-agents/remote/` with its own CLAUDE.md and a permission list limited to the launcher. Open it in the Claude app and ask it, in plain language, to run, talk, pair, kick off, check status, list sessions, or stop a project. It calls the launcher, which starts the orchestrator command detached inside tmux with `--remote-control`, so the new Morgan or Riley session appears in the app on its own a few seconds later.
+
+```bash
+./devshop remote start            # run the control server in this terminal (Ctrl+C stops it)
+./devshop remote install          # ...or install it as a launchd agent that starts at login
+./devshop remote status           # plist, tmux session, server process, session URL, running sessions
+./devshop remote remove           # unload and delete the launchd agent
+
+./devshop remote launch run my-app [--resume]     # what the control session runs for you
+./devshop remote launch talk|pair|kickoff <project>
+./devshop remote sessions
+./devshop remote stop my-app [--command run]      # /exit, then Ctrl-C after 30s; the run's post-session path still runs
+```
+
+Sessions started this way are named `devshop-<project>-<command>` in tmux, so from your laptop `tmux attach -t devshop-my-app-run` shows the live terminal. The launcher refuses to start a second session of the same command for a project. Under launchd the server runs inside tmux session `devshop-remote` (server mode expects a terminal) and restarts itself with `--continue` after Claude Code's network-outage give-up, so the control session keeps its history. Requires `tmux` (`brew install tmux`) and the same claude.ai login as above; if the server exits immediately three times in a row, `remote start` stops and prints what to check.
+
 ## Testing
 
 ```bash

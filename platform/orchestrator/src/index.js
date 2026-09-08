@@ -6,7 +6,7 @@ const { resolveProject, loadRegistry, saveRegistry, DEVSHOP_ROOT } = require('./
 const TEMPLATES_DIR = path.join(DEVSHOP_ROOT, 'templates', 'agents');
 const ACTIVE_AGENTS_DIR = path.join(DEVSHOP_ROOT, 'active-agents');
 
-const COMMANDS = ['kickoff', 'run', 'plan', 'talk', 'pair', 'status', 'schedule', 'cadence', 'action', 'recover', 'security', 'api', 'help'];
+const COMMANDS = ['kickoff', 'run', 'plan', 'talk', 'pair', 'status', 'schedule', 'cadence', 'action', 'recover', 'security', 'api', 'remote', 'help'];
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -19,6 +19,7 @@ async function main() {
       'dry-run': { type: 'boolean', default: false },
       'no-auto-resume': { type: 'boolean', default: false },
       'remote-control': { type: 'boolean', default: false },
+      command: { type: 'string' },
       requirements: { type: 'string' },
       window: { type: 'string' },
       type: { type: 'string' },
@@ -59,6 +60,19 @@ async function main() {
       design: values.design,
       remoteControl: values['remote-control'] || null
     });
+    process.exit(exitCode);
+  }
+
+  // remote manages the Remote Control server and detached launches — no project resolution here
+  if (command === 'remote') {
+    const subcommand = rest[0];
+    if (!subcommand) {
+      console.error('Error: remote requires a subcommand (start, install, remove, status, launch, sessions, stop)');
+      printUsage();
+      process.exit(1);
+    }
+    const { remoteCommand } = require('./commands/remote');
+    const exitCode = await remoteCommand(subcommand, rest.slice(1), values);
     process.exit(exitCode);
   }
 
@@ -222,6 +236,8 @@ Commands:
   recover <project>                Clean up orphaned worktrees, stale branches, inconsistent state
   security <project>               Run a standalone security scan (Casey)
   api                               Start REST API server for programmatic access
+  remote <sub> [args]               Phone control via the Claude app: start|install|remove|status the control server,
+                                    launch <run|talk|pair|kickoff> <project> [--resume], sessions, stop <project> [--command <cmd>]
   help                              Show this help message
 
 Session commands (during kickoff, plan, talk, pair):
@@ -233,6 +249,7 @@ Options:
   --resume                 Resume a previously interrupted session
   --no-auto-resume         Don't auto-resume after a usage-limit stop (run)
   --remote-control         Also expose the session in the Claude app via Remote Control (kickoff, talk, pair, run)
+  --command <cmd>          Limit remote stop to one session type (run/talk/pair/kickoff)
   --fresh                  Start a fresh session (ignore saved state)
   --requirements <ids>     Comma-separated requirement IDs to work on
   --window <name>          Run in a specific time window (night/morning/day)
@@ -259,6 +276,8 @@ Examples:
   ./devshop pair my-app
   ./devshop pair my-app --resume
   ./devshop run my-app --remote-control
+  ./devshop remote install
+  ./devshop remote launch run my-app
   ./devshop schedule install my-app
   ./devshop schedule pause my-app
   ./devshop schedule resume my-app
