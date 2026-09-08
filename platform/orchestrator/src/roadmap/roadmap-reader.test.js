@@ -256,6 +256,52 @@ describe('RoadmapReader', () => {
       assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['I', 'II']);
     });
 
+    it('a pending Group Z checkpoint does not block the next phase', () => {
+      const content = `# Roadmap: Test
+## Phase I: One
+### Group A: Build
+- [x] \`a\` — done
+### Group Z: User Testing
+- [ ] \`test-phase-1\` — [HUMAN] try it on a device
+## Phase II: Two
+<!-- depends: Phase I -->
+### Group A: More
+- [ ] \`b\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['I', 'II']);
+    });
+
+    it('a pending non-Group-Z HUMAN item still blocks the next phase', () => {
+      const content = `# Roadmap: Test
+## Phase I: One
+### Group A: Accounts
+- [ ] \`vendor-account\` — [HUMAN] create the account
+### Group Z: User Testing
+- [x] \`test-phase-1\` — [HUMAN] done
+## Phase II: Two
+<!-- depends: Phase I -->
+### Group A: More
+- [ ] \`b\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['I']);
+    });
+
+    it('the Group Z exception composes with fail-closed unknown dependencies', () => {
+      const content = `# Roadmap: Test
+## Phase I: One
+### Group Z: User Testing
+- [ ] \`test-phase-1\` — [HUMAN] try it
+## Phase II: Two
+<!-- depends: Phase I, Phase IX -->
+### Group A: More
+- [ ] \`b\` — pending
+`;
+      const roadmap = reader.parseContent(content);
+      assert.deepEqual(reader.getActionablePhaseNumbers(roadmap), ['I']);
+    });
+
     it('returns multiple actionable phases independently', () => {
       const roadmap = reader.parseContent(`# Roadmap: Multi
 ## Phase I: First
