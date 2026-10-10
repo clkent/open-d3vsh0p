@@ -43,6 +43,7 @@
 - [x] `kickoff-bootstrap` — Post-spec bootstrap agent: install tech stack deps, create config files, verify build
 - [x] `design-skills-kickoff` — Optional --design flag on kickoff to install Impeccable design skills for frontend projects
 - [x] `design-aware-agents` — Conditional /polish + /audit in implementation agents, design_quality scoring in review, frontend tech stack detection
+- [x] `kickoff-retry-safety` — Scaffold preflights `gh` token scopes (fails fast with the `gh auth refresh -s workflow` remedy when the template ships workflow files), skips the initial commit on a clean tree so re-running kickoff after a rejected push completes without manual cleanup, and maps GitHub's workflow-scope rejection to an actionable error
 
 ### Group B: Daily Scheduling
 - [x] `schedule-config` — Per-project schedule schema in registry, window-config validation
