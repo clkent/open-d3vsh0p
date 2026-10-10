@@ -20,7 +20,7 @@ cd open-d3vsh0p/platform/orchestrator && npm install
 ### Prerequisites
 - Node.js 20+
 - Claude Code CLI installed
-- GitHub CLI (`gh`) — authenticated via `gh auth login`
+- GitHub CLI (`gh`) — authenticated via `gh auth login`, with the `repo` and `workflow` scopes (the starter template ships a GitHub Actions workflow, and GitHub rejects pushes of `.github/workflows/*` without `workflow`). If `gh auth status` doesn't list `workflow`, run `gh auth refresh -h github.com -s workflow`; kickoff checks this up front and is safe to re-run after a rejected push
 
 ## How It Works
 

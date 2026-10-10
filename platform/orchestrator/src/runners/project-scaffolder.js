@@ -1,15 +1,31 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { execFile: execFileAsync } = require('../infra/exec-utils');
+const execUtils = require('../infra/exec-utils');
 
 const PROJECTS_DIR = path.join(require('os').homedir(), 'projects');
 const DEVSHOP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const TEMPLATES_DIR = path.join(DEVSHOP_ROOT, 'templates', 'project-starter');
 const ACTIVE_AGENTS_DIR = path.join(DEVSHOP_ROOT, 'active-agents');
 
+const WORKFLOWS_TEMPLATE_DIR = path.join(TEMPLATES_DIR, '.github', 'workflows');
+
+const WORKFLOW_SCOPE_REMEDY =
+  "GitHub token is missing the 'workflow' scope (needed to push .github/workflows/*). " +
+  'Run: gh auth refresh -h github.com -s workflow';
+
+const WORKFLOW_SCOPE_REJECTION = /workflow.*scope|refusing to allow an OAuth App/i;
+
 class ProjectScaffolder {
-  constructor(logger) {
+  /**
+   * @param {object} logger
+   * @param {object} [deps] - injectable dependencies (tests)
+   * @param {Function} [deps.execFile] - promisified execFile; defaults to infra/exec-utils
+   * @param {Function} [deps.templateHasWorkflows] - async () => boolean
+   */
+  constructor(logger, deps = {}) {
     this.logger = logger;
+    this._execFile = deps.execFile || execUtils.execFile;
+    this._templateHasWorkflows = deps.templateHasWorkflows || defaultTemplateHasWorkflows;
   }
 
   /**
@@ -61,7 +77,7 @@ class ProjectScaffolder {
     // Step 3: Create GitHub repo and clone
     await this.logger.log('info', 'kickoff_creating_repo', { shortName });
     try {
-      await execFileAsync('gh', [
+      await this._execFile('gh', [
         'repo', 'create', `${githubOwner}/${shortName}`,
         '--private', '--clone'
       ], { cwd: PROJECTS_DIR });
@@ -70,7 +86,7 @@ class ProjectScaffolder {
       if (err.stderr && err.stderr.includes('already exists')) {
         await this.logger.log('info', 'kickoff_repo_exists', { shortName });
         try {
-          await execFileAsync('git', ['clone', `https://github.com/${githubOwner}/${shortName}.git`], {
+          await this._execFile('git', ['clone', `https://github.com/${githubOwner}/${shortName}.git`], {
             cwd: PROJECTS_DIR
           });
         } catch (cloneErr) {
@@ -92,7 +108,7 @@ class ProjectScaffolder {
     await this._renderTemplates(TEMPLATES_DIR, projectDir, vars);
 
     // Step 4.5: Configure git hooks
-    await execFileAsync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: projectDir });
+    await this._execFile('git', ['config', 'core.hooksPath', '.githooks'], { cwd: projectDir });
     const hooksDir = path.join(projectDir, '.githooks');
     try {
       const hooks = await fs.readdir(hooksDir);
@@ -114,18 +130,8 @@ class ProjectScaffolder {
 
     // Step 6: Initial commit + push
     await this.logger.log('info', 'kickoff_initial_commit', { projectDir });
-    await execFileAsync('git', ['add', '-A'], { cwd: projectDir });
-    await execFileAsync('git', [
-      'commit', '-m', `chore: scaffold ${projectName} via DevShop kickoff`
-    ], { cwd: projectDir });
-    // Initial scaffold push bypasses pre-push hook (--no-verify) because
-    // the remote is empty — there's no upstream main to PR against yet.
-    try {
-      await execFileAsync('git', ['push', '--no-verify', '-u', 'origin', 'main'], { cwd: projectDir });
-    } catch {
-      // Try HEAD if main doesn't exist yet
-      await execFileAsync('git', ['push', '--no-verify', '-u', 'origin', 'HEAD'], { cwd: projectDir });
-    }
+    await this._commitScaffold(projectDir, projectName);
+    await this._pushInitial(projectDir);
 
     // Step 7: Register in project-registry.json
     const entry = {
@@ -154,25 +160,93 @@ class ProjectScaffolder {
   }
 
   async _getGitHubOwner() {
-    const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login']);
+    const { stdout } = await this._execFile('gh', ['api', 'user', '--jq', '.login']);
     return stdout.trim();
   }
 
+  /**
+   * Verify gh is authenticated and the token can push the starter template.
+   * GitHub refuses pushes that add/update .github/workflows/* from a token
+   * without the `workflow` scope, and `gh auth login` doesn't grant it by
+   * default — so check up front, before creating any repo or directory.
+   */
   async _verifyGhCli() {
+    let output;
     try {
-      await execFileAsync('gh', ['auth', 'status']);
+      const { stdout, stderr } = await this._execFile('gh', ['auth', 'status']);
+      // gh prints the status report to stderr on older versions, stdout on newer
+      output = `${stdout || ''}\n${stderr || ''}`;
     } catch (err) {
       throw new Error(
         'GitHub CLI (gh) is not authenticated. Run `gh auth login` first.\n' +
         (err.stderr || err.message)
       );
     }
+
+    const scopes = parseTokenScopes(output);
+    if (scopes === null) {
+      await this.logger.log('warn', 'kickoff_scopes_unknown', {
+        reason: 'no "Token scopes:" line in gh auth status output'
+      });
+      return;
+    }
+
+    if (await this._templateHasWorkflows() && !scopes.includes('workflow')) {
+      await this.logger.log('error', 'kickoff_missing_scope', { scopes, required: 'workflow' });
+      throw new Error(WORKFLOW_SCOPE_REMEDY);
+    }
+  }
+
+  /**
+   * Stage and commit the rendered scaffold. A retry after a rejected push
+   * already has the scaffold committed; committing a clean tree fails, so
+   * skip it and let the caller go straight to push.
+   */
+  async _commitScaffold(projectDir, projectName) {
+    await this._execFile('git', ['add', '-A'], { cwd: projectDir });
+    const { stdout } = await this._execFile('git', ['status', '--porcelain'], { cwd: projectDir });
+    if ((stdout || '').trim() === '') {
+      await this.logger.log('info', 'kickoff_nothing_to_commit', { projectDir });
+      return false;
+    }
+    await this._execFile('git', [
+      'commit', '-m', `chore: scaffold ${projectName} via DevShop kickoff`
+    ], { cwd: projectDir });
+    return true;
+  }
+
+  /**
+   * Initial scaffold push. Bypasses the pre-push hook (--no-verify) because
+   * the remote is empty — there's no upstream main to PR against yet.
+   * Maps GitHub's workflow-scope rejection to an actionable error.
+   */
+  async _pushInitial(projectDir) {
+    let lastErr;
+    try {
+      await this._execFile('git', ['push', '--no-verify', '-u', 'origin', 'main'], { cwd: projectDir });
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+    // Try HEAD if main doesn't exist yet
+    try {
+      await this._execFile('git', ['push', '--no-verify', '-u', 'origin', 'HEAD'], { cwd: projectDir });
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+    const stderr = lastErr.stderr || '';
+    if (WORKFLOW_SCOPE_REJECTION.test(stderr)) {
+      await this.logger.log('error', 'kickoff_push_rejected_scope', { stderr });
+      throw new Error(`${WORKFLOW_SCOPE_REMEDY}\n${stderr.trim()}`);
+    }
+    throw lastErr;
   }
 
   async _installDesignSkills(projectDir) {
     try {
       await this.logger.log('info', 'design_skills_installing', { projectDir });
-      await execFileAsync('npx', ['impeccable', 'install', '--providers=claude', '--scope=project'], {
+      await this._execFile('npx', ['impeccable', 'install', '--providers=claude', '--scope=project'], {
         cwd: projectDir,
         timeout: 60000
       });
@@ -208,4 +282,26 @@ class ProjectScaffolder {
   }
 }
 
-module.exports = { ProjectScaffolder };
+/**
+ * Parse the "Token scopes: 'gist', 'read:org', 'repo'" line from gh auth status.
+ * Returns an array of scopes, or null if no such line is present.
+ */
+function parseTokenScopes(output) {
+  const match = /Token scopes:\s*(.+)/i.exec(output || '');
+  if (!match) return null;
+  return match[1]
+    .split(',')
+    .map(s => s.trim().replace(/^'|'$/g, ''))
+    .filter(Boolean);
+}
+
+async function defaultTemplateHasWorkflows() {
+  try {
+    const entries = await fs.readdir(WORKFLOWS_TEMPLATE_DIR);
+    return entries.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { ProjectScaffolder, parseTokenScopes, WORKFLOW_SCOPE_REMEDY };
